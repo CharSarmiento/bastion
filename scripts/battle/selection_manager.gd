@@ -1,21 +1,29 @@
 class_name SelectionManager
 extends Node2D
-## Selección de formaciones con clic o recuadro (botón izquierdo; Mayús para añadir)
-## y orden de mover con el botón derecho.
+## Selección de formaciones con clic o recuadro (botón izquierdo; Mayús para añadir).
+## Botón derecho: un clic mueve; arrastrar dibuja el frente (anchura y hacia dónde miran).
 
-## Píxeles de pantalla que hay que arrastrar para que un clic se convierta en recuadro.
+## Píxeles de pantalla que hay que arrastrar para que un clic se convierta en arrastre.
 const DRAG_THRESHOLD := 6.0
 ## Distancia (píxeles del mundo) a un soldado para seleccionar su formación con un clic.
 const CLICK_RADIUS := 16.0
 const MARKER_DURATION := 0.6
 const BOX_FILL := Color(0.45, 1.0, 0.45, 0.12)
 const BOX_BORDER := Color(0.45, 1.0, 0.45, 0.9)
+## Longitud de la flecha que indica hacia dónde mirará el frente.
+const FACING_ARROW_LENGTH := 36.0
 
 var _selected: Array[Formation] = []
-var _pressing: bool = false
-var _dragging: bool = false
-var _press_screen: Vector2
-var _press_world: Vector2
+# Botón izquierdo: selección.
+var _left_pressing: bool = false
+var _left_dragging: bool = false
+var _left_press_screen: Vector2
+var _left_press_world: Vector2
+# Botón derecho: órdenes.
+var _right_pressing: bool = false
+var _right_dragging: bool = false
+var _right_press_screen: Vector2
+var _right_press_world: Vector2
 ## Marcadores de destino: cada uno es [posición, tiempo restante].
 var _markers: Array[Array] = []
 
@@ -24,26 +32,48 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var button: InputEventMouseButton = event
 		if button.button_index == MOUSE_BUTTON_LEFT:
-			if button.pressed:
-				_pressing = true
-				_dragging = false
-				_press_screen = button.position
-				_press_world = get_global_mouse_position()
-			elif _pressing:
-				_pressing = false
-				var additive: bool = button.shift_pressed
-				if _dragging:
-					_select_in_rect(_drag_rect(), additive)
-				else:
-					_select_at(get_global_mouse_position(), additive)
-				_dragging = false
-				queue_redraw()
-		elif button.button_index == MOUSE_BUTTON_RIGHT and button.pressed:
-			_order_move(get_global_mouse_position())
-	elif event is InputEventMouseMotion and _pressing:
+			_handle_left_button(button)
+		elif button.button_index == MOUSE_BUTTON_RIGHT:
+			_handle_right_button(button)
+	elif event is InputEventMouseMotion:
 		var motion: InputEventMouseMotion = event
-		if not _dragging and motion.position.distance_to(_press_screen) > DRAG_THRESHOLD:
-			_dragging = true
+		if _left_pressing and motion.position.distance_to(_left_press_screen) > DRAG_THRESHOLD:
+			_left_dragging = true
+		if _right_pressing and motion.position.distance_to(_right_press_screen) > DRAG_THRESHOLD:
+			_right_dragging = true
+		if _left_pressing or _right_pressing:
+			queue_redraw()
+
+
+func _handle_left_button(button: InputEventMouseButton) -> void:
+	if button.pressed:
+		_left_pressing = true
+		_left_dragging = false
+		_left_press_screen = button.position
+		_left_press_world = get_global_mouse_position()
+	elif _left_pressing:
+		_left_pressing = false
+		if _left_dragging:
+			_select_in_rect(_drag_rect(), button.shift_pressed)
+		else:
+			_select_at(get_global_mouse_position(), button.shift_pressed)
+		_left_dragging = false
+		queue_redraw()
+
+
+func _handle_right_button(button: InputEventMouseButton) -> void:
+	if button.pressed:
+		_right_pressing = true
+		_right_dragging = false
+		_right_press_screen = button.position
+		_right_press_world = get_global_mouse_position()
+	elif _right_pressing:
+		_right_pressing = false
+		if _right_dragging:
+			_order_front(_right_press_world, get_global_mouse_position())
+		else:
+			_order_move(get_global_mouse_position())
+		_right_dragging = false
 		queue_redraw()
 
 
@@ -58,17 +88,40 @@ func _process(delta: float) -> void:
 
 
 func _draw() -> void:
-	if _dragging:
+	if _left_dragging:
 		var rect: Rect2 = _drag_rect()
 		draw_rect(rect, BOX_FILL, true)
 		draw_rect(rect, BOX_BORDER, false, -1.0)
+	if _right_dragging:
+		_draw_front_preview(_right_press_world, get_global_mouse_position())
 	for marker in _markers:
 		var t: float = marker[1] / MARKER_DURATION
 		draw_arc(marker[0], 6.0 + 14.0 * t, 0.0, TAU, 24, Color(BOX_BORDER, t), 1.5)
 
 
+## Línea del frente, flecha hacia donde mirará y un punto por escuadra.
+func _draw_front_preview(from: Vector2, to: Vector2) -> void:
+	_prune_selection()
+	if _selected.is_empty():
+		return
+	var facing: Vector2 = _front_facing(from, to)
+	var center: Vector2 = (from + to) / 2.0
+	draw_line(from, to, BOX_BORDER, -1.0)
+	var tip: Vector2 = center + facing * FACING_ARROW_LENGTH
+	draw_line(center, tip, BOX_BORDER, -1.0)
+	draw_line(tip, tip - facing.rotated(0.5) * 8.0, BOX_BORDER, -1.0)
+	draw_line(tip, tip - facing.rotated(-0.5) * 8.0, BOX_BORDER, -1.0)
+	for part in _split_front(from, to):
+		var formation: Formation = part[0]
+		var part_from: Vector2 = part[1]
+		var part_to: Vector2 = part[2]
+		var count: int = formation.squad_count()
+		for k in count:
+			draw_circle(part_from.lerp(part_to, (k + 0.5) / count), 3.0, BOX_BORDER)
+
+
 func _drag_rect() -> Rect2:
-	return Rect2(_press_world, get_global_mouse_position() - _press_world).abs()
+	return Rect2(_left_press_world, get_global_mouse_position() - _left_press_world).abs()
 
 
 func _player_formations() -> Array[Formation]:
@@ -78,6 +131,12 @@ func _player_formations() -> Array[Formation]:
 		if formation.team == Formation.Team.PLAYER:
 			result.append(formation)
 	return result
+
+
+func _prune_selection() -> void:
+	for i in range(_selected.size() - 1, -1, -1):
+		if not is_instance_valid(_selected[i]):
+			_selected.remove_at(i)
 
 
 func _select_at(point: Vector2, additive: bool) -> void:
@@ -108,11 +167,9 @@ func _set_selection(formations: Array[Formation], additive: bool) -> void:
 			formation.selected = true
 
 
-## Mueve las formaciones seleccionadas; si hay varias, conservan su posición relativa.
+## Orden simple: mueve las formaciones seleccionadas; si hay varias, conservan su posición relativa.
 func _order_move(target: Vector2) -> void:
-	for i in range(_selected.size() - 1, -1, -1):
-		if not is_instance_valid(_selected[i]):
-			_selected.remove_at(i)
+	_prune_selection()
 	if _selected.is_empty():
 		return
 	var center := Vector2.ZERO
@@ -122,4 +179,38 @@ func _order_move(target: Vector2) -> void:
 	for formation in _selected:
 		formation.move_to(target + formation.global_position - center)
 	_markers.append([target, MARKER_DURATION])
-	queue_redraw()
+
+
+## Orden de frente: cada formación seleccionada recibe su parte de la línea dibujada.
+func _order_front(from: Vector2, to: Vector2) -> void:
+	_prune_selection()
+	if _selected.is_empty():
+		return
+	var facing: Vector2 = _front_facing(from, to)
+	for part in _split_front(from, to):
+		var formation: Formation = part[0]
+		var part_from: Vector2 = part[1]
+		var part_to: Vector2 = part[2]
+		formation.move_to((part_from + part_to) / 2.0, facing, part_from.distance_to(part_to))
+	_markers.append([(from + to) / 2.0, MARKER_DURATION])
+
+
+## Arrastrar de izquierda a derecha hace mirar "hacia arriba" respecto a la línea.
+func _front_facing(from: Vector2, to: Vector2) -> Vector2:
+	var line: Vector2 = (to - from).normalized()
+	return Vector2(line.y, -line.x)
+
+
+## Reparte la línea entre las formaciones seleccionadas, ordenadas a lo largo de ella para que
+## no se crucen. Devuelve una lista de [formación, inicio de su tramo, fin de su tramo].
+func _split_front(from: Vector2, to: Vector2) -> Array[Array]:
+	var line: Vector2 = to - from
+	var ordered: Array[Formation] = _selected.duplicate()
+	ordered.sort_custom(func(a: Formation, b: Formation) -> bool:
+		return a.global_position.dot(line) < b.global_position.dot(line))
+	var parts: Array[Array] = []
+	for i in ordered.size():
+		var part_from: Vector2 = from + line * (float(i) / ordered.size())
+		var part_to: Vector2 = from + line * (float(i + 1) / ordered.size())
+		parts.append([ordered[i], part_from, part_to])
+	return parts

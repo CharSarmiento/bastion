@@ -1,8 +1,9 @@
 class_name Formation
 extends Node2D
 ## Unidad de mando (compañía): el jugador la selecciona y la ordena como un solo bloque.
-## La posición de este nodo es el centro de la formación; calcula la ruta con
-## NavigationAgent2D y asigna a cada soldado un puesto en una formación en línea.
+## Por dentro se divide sola en escuadras (Squad) que marchan con cierta independencia
+## y se despliegan dispersas a lo largo del frente ordenado.
+## La posición de este nodo es la media de las posiciones de sus soldados.
 
 enum Team { PLAYER, ENEMY }
 
@@ -11,44 +12,37 @@ enum Team { PLAYER, ENEMY }
 ## Dirección hacia la que mira la formación al empezar.
 @export var facing: Vector2 = Vector2.UP
 
-## Retraso (en píxeles) del soldado más rezagado a partir del cual la formación frena.
-const LAG_TOLERANCE := 20.0
-## Retraso con el que la formación avanza al ritmo mínimo.
-const LAG_MAX := 80.0
-const MIN_SPEED_FACTOR := 0.25
-## Los soldados pueden ir algo más rápido que la formación para recuperar su puesto.
-const SOLDIER_SPEED_FACTOR := 1.6
-
 var soldiers: Array[Soldier] = []
+var squads: Array[Squad] = []
 var selected: bool = false:
 	set(value):
 		selected = value
 		for soldier in soldiers:
 			soldier.selected = value
 
-var _moving: bool = false
-## Dirección actual de la línea (hacia dónde está su frente).
-var _heading: Vector2
-## Dirección hacia la que mirará al terminar el movimiento.
-var _final_facing: Vector2
-
-@onready var _agent: NavigationAgent2D = $NavigationAgent2D
-
 
 func _ready() -> void:
 	add_to_group("formations")
-	_heading = facing.normalized()
-	_final_facing = _heading
-	_spawn_soldiers()
+	facing = facing.normalized()
+	_spawn()
 
 
-## Orden de mover: la formación va hasta target y al llegar mira en la dirección de la marcha.
-func move_to(target: Vector2) -> void:
-	var direction: Vector2 = target - global_position
-	if direction.length() > 1.0:
-		_final_facing = direction.normalized()
-	_agent.target_position = target
-	_moving = true
+## Orden de mover. facing es hacia dónde mirará al llegar (si es cero, hacia donde avanza)
+## y width la anchura del frente (si es cero, la anchura por defecto de su ficha).
+func move_to(target: Vector2, new_facing: Vector2 = Vector2.ZERO, width: float = 0.0) -> void:
+	if new_facing == Vector2.ZERO:
+		var direction: Vector2 = target - global_position
+		new_facing = direction.normalized() if direction.length() > 1.0 else facing
+	facing = new_facing.normalized()
+	if width <= 0.0:
+		width = unit_type.default_front_width
+	width = clampf(width, unit_type.min_front_width, unit_type.max_front_width)
+	_deploy(target, facing, width, false)
+
+
+## Número de escuadras (para dibujar la vista previa del frente).
+func squad_count() -> int:
+	return squads.size()
 
 
 func has_soldier_near(point: Vector2, radius: float) -> bool:
@@ -65,78 +59,43 @@ func has_soldier_in_rect(rect: Rect2) -> bool:
 	return false
 
 
-func _spawn_soldiers() -> void:
+func _physics_process(_delta: float) -> void:
+	if soldiers.is_empty():
+		return
+	var sum := Vector2.ZERO
+	for soldier in soldiers:
+		sum += soldier.global_position
+	global_position = sum / soldiers.size()
+
+
+func _spawn() -> void:
+	var start: Vector2 = global_position
 	for i in unit_type.soldier_count:
 		var soldier: Soldier = unit_type.soldier_scene.instantiate()
 		# top_level: el soldado no se mueve automáticamente con el nodo de la formación;
 		# camina él solo hacia su puesto.
 		soldier.top_level = true
-		soldier.max_speed = unit_type.move_speed * SOLDIER_SPEED_FACTOR
 		add_child(soldier)
+		soldier.global_position = start
 		soldiers.append(soldier)
-	for i in soldiers.size():
-		soldiers[i].snap_to_slot(_slot_position(i), _heading)
+	for first in range(0, soldiers.size(), unit_type.squad_size):
+		var squad := Squad.new()
+		squad.name = "Squad%d" % (squads.size() + 1)
+		add_child(squad)
+		squad.setup(unit_type, soldiers.slice(first, first + unit_type.squad_size))
+		squads.append(squad)
+	_deploy(start, facing, unit_type.default_front_width, true)
 
 
-func _physics_process(delta: float) -> void:
-	if _moving:
-		if _agent.is_navigation_finished():
-			_moving = false
-		else:
-			var next_point: Vector2 = _agent.get_next_path_position()
-			var to_next: Vector2 = next_point - global_position
-			if to_next.length() > 0.5:
-				var step: float = unit_type.move_speed * _cohesion_factor() * delta
-				global_position += to_next.normalized() * minf(step, to_next.length())
-				_turn_heading(to_next, delta)
-	else:
-		_turn_heading(_final_facing, delta)
-	_assign_slots()
-
-
-## Gira la línea poco a poco. Si hay que dar media vuelta, la formación se "invierte"
-## al instante (cada soldado toma el puesto opuesto) en vez de rotar 180 grados entera.
-func _turn_heading(direction: Vector2, delta: float) -> void:
-	var target: Vector2 = direction.normalized()
-	if _heading.dot(target) < -0.2:
-		_heading = -_heading
-		soldiers.reverse()
-	var turn_speed: float = deg_to_rad(unit_type.turn_speed_degrees)
-	_heading = Vector2.from_angle(rotate_toward(_heading.angle(), target.angle(), turn_speed * delta))
-
-
-## Frena la formación si algún soldado se ha quedado atrás.
-func _cohesion_factor() -> float:
-	var max_lag: float = 0.0
-	for soldier in soldiers:
-		max_lag = maxf(max_lag, soldier.distance_to_slot())
-	var t: float = clampf((max_lag - LAG_TOLERANCE) / (LAG_MAX - LAG_TOLERANCE), 0.0, 1.0)
-	return lerpf(1.0, MIN_SPEED_FACTOR, t)
-
-
-func _assign_slots() -> void:
-	var map: RID = get_world_2d().navigation_map
-	var map_ready: bool = NavigationServer2D.map_get_iteration_id(map) > 0
-	for i in soldiers.size():
-		var slot: Vector2 = _slot_position(i)
-		if map_ready:
-			# Si el puesto cae en el agua u otra zona no transitable, se usa el punto
-			# transitable más cercano (por ejemplo, al cruzar el puente).
-			slot = NavigationServer2D.map_get_closest_point(map, slot)
-		soldiers[i].set_slot(slot, _heading)
-
-
-## Posición en el mundo del puesto número index en una formación en línea:
-## varias filas, centradas en la posición de la formación.
-func _slot_position(index: int) -> Vector2:
-	var count: int = soldiers.size()
-	var ranks: int = mini(unit_type.ranks, count)
-	var per_rank: int = ceili(float(count) / ranks)
-	var rank: int = floori(float(index) / per_rank)
-	var file: int = index % per_rank
-	var in_this_rank: int = mini(per_rank, count - rank * per_rank)
-	var spacing: float = unit_type.soldier_spacing
-	var side: float = (file - (in_this_rank - 1) / 2.0) * spacing
-	var back: float = (rank - (ranks - 1) / 2.0) * spacing
-	var right := Vector2(-_heading.y, _heading.x)
-	return global_position + right * side - _heading * back
+## Divide el frente en un tramo por escuadra y se los reparte sin que se crucen:
+## la escuadra que está más a la izquierda (mirando al frente) va al tramo de la izquierda.
+func _deploy(center: Vector2, direction: Vector2, width: float, instant: bool) -> void:
+	var right := Vector2(-direction.y, direction.x)
+	var ordered: Array[Squad] = squads.duplicate()
+	ordered.sort_custom(func(a: Squad, b: Squad) -> bool:
+		return a.center().dot(right) < b.center().dot(right))
+	var segment: float = width / ordered.size()
+	var occupied: Array[Vector2] = []
+	for k in ordered.size():
+		var segment_center: Vector2 = center + right * ((k - (ordered.size() - 1) / 2.0) * segment)
+		ordered[k].order_move(segment_center, direction, segment, center, width / 2.0, occupied, instant)

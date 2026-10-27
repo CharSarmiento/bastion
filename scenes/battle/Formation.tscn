@@ -4,7 +4,3 @@
 
 [node name="Formation" type="Node2D" unique_id=1042568440]
 script = ExtResource("1_75stv")
-
-[node name="NavigationAgent2D" type="NavigationAgent2D" parent="." unique_id=1947577005]
-path_desired_distance = 8.0
-target_desired_distance = 4.0

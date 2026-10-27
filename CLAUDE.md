@@ -15,8 +15,24 @@
 
 ## Fase actual: 1 · Prototipo de batalla
 Mapa de prueba, una compañía propia y dos enemigas quietas. Selección (clic o recuadro),
-movimiento en formación en línea con clic derecho, disparo automático al enemigo en rango.
+movimiento con clic derecho, disparo automático al enemigo en rango.
 Listo cuando: mover y disparar se siente bien.
+
+Orden de trabajo acordado: pasos 1-2 hechos → **A. movimiento moderno** (hecho) →
+paso 3: enemigos y disparos → C. cobertura → D. avance por saltos.
+
+## Movimiento de infantería moderna (prioridad del usuario)
+Nada de bloques rígidos del siglo XIX: las unidades se mueven sueltas y con independencia.
+- Jerarquía: compañía (`Formation`, la que manda el jugador) → escuadras (`Squad`, automáticas,
+  `squad_size` soldados) → soldados (`Soldier`). El jugador nunca manda escuadras sueltas.
+- Cada escuadra calcula su propia ruta. Un punto guía ("ancla") la recorre y deja un rastro;
+  los soldados marchan en fila suelta sobre ese rastro, así cruzan puentes en fila.
+- Reacción escalonada (retraso por escuadra y por soldado) y velocidades con variación.
+- Al llegar, `Squad._plan_deployment()` elige puntos dispersos e irregulares en el tramo del
+  frente de la escuadra; los soldados vigilan en abanico y miran a los lados de vez en cuando.
+  En la etapa C esa función se sustituirá por la búsqueda de cobertura.
+- Clic derecho = mover; arrastrar con clic derecho = dibujar el frente (anchura y orientación).
+- Todos los números se ajustan en `data/unit_types/rifle_company.tres`.
 
 ## Assets (pack CraftPix, pixel art)
 - Casilla de terreno 64×64 (assets/terrain/tiles/tiles.png: agua, césped, arena, tierra, asfalto).

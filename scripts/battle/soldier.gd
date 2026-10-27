@@ -1,10 +1,13 @@
 class_name Soldier
 extends Node2D
-## Un soldado: camina hacia el puesto que le asigna su formación y mira hacia donde va.
-## No calcula rutas propias; eso lo hace la formación.
+## Un soldado: camina hacia el puesto que le asigna su escuadra y mira hacia donde va.
+## No calcula rutas propias salvo pequeños rodeos; la ruta la calcula su escuadra.
+## Parado, vigila su sector y de vez en cuando mira un poco a un lado.
 
 ## Velocidad de giro, en radianes por segundo.
 const TURN_SPEED := 8.0
+## Velocidad de giro al mirar alrededor estando parado (más tranquila).
+const LOOK_TURN_SPEED := 3.0
 ## A menos de esta distancia (píxeles) del puesto se considera que ha llegado.
 const ARRIVE_DISTANCE := 2.0
 ## A partir de esta distancia mira hacia donde camina; más cerca, hacia donde mira la formación.
@@ -17,7 +20,7 @@ const PATH_CHECK_INTERVAL := 0.2
 ## Distancia entre los puntos que se comprueban a lo largo del camino recto.
 const PATH_CHECK_STEP := 12.0
 
-## Velocidad máxima; la formación la ajusta para que pueda alcanzar su puesto.
+## Velocidad máxima; la escuadra la ajusta para que pueda alcanzar su puesto.
 var max_speed: float = 100.0
 var selected: bool = false:
 	set(value):
@@ -30,6 +33,9 @@ var _facing: Vector2 = Vector2.DOWN
 ## Rodeo hasta el puesto cuando el camino recto pasa por agua u otra zona no transitable.
 var _detour: PackedVector2Array = PackedVector2Array()
 var _path_check_timer: float
+## Giro (radianes) de la mirada ocasional hacia un lado, y tiempo hasta el siguiente cambio.
+var _glance_angle: float = 0.0
+var _glance_timer: float
 
 @onready var _visual: Node2D = $Visual
 @onready var _legs: AnimatedSprite2D = $Visual/Legs
@@ -39,6 +45,7 @@ func _ready() -> void:
 	_slot = global_position
 	# Momento inicial aleatorio para que no todos los soldados comprueben en el mismo frame.
 	_path_check_timer = randf() * PATH_CHECK_INTERVAL
+	_glance_timer = randf_range(3.0, 7.0)
 	_apply_facing()
 
 
@@ -78,11 +85,12 @@ func _physics_process(delta: float) -> void:
 		# Frena al acercarse al puesto para no pasarse ni temblar.
 		var speed: float = minf(max_speed, slot_distance * 6.0)
 		global_position += to_goal / distance * minf(speed * delta, distance)
-		_turn_toward(to_goal if slot_distance > FACE_MOVEMENT_DISTANCE else _slot_facing, delta)
+		_turn_toward(to_goal if slot_distance > FACE_MOVEMENT_DISTANCE else _slot_facing, TURN_SPEED, delta)
 		_legs.play("walk")
 		_legs.speed_scale = speed / WALK_ANIM_REFERENCE_SPEED
 	else:
-		_turn_toward(_slot_facing, delta)
+		_update_glance(delta)
+		_turn_toward(_slot_facing.rotated(_glance_angle), LOOK_TURN_SPEED, delta)
 		if _legs.is_playing():
 			_legs.stop()
 			_legs.frame = 0
@@ -115,10 +123,23 @@ func _draw() -> void:
 		draw_arc(Vector2.ZERO, 13.0, 0.0, TAU, 24, SELECTION_COLOR, 1.5)
 
 
-func _turn_toward(direction: Vector2, delta: float) -> void:
+## Cada 3-7 s mira un poco a un lado durante 1-2 s y luego vuelve a su sector.
+func _update_glance(delta: float) -> void:
+	_glance_timer -= delta
+	if _glance_timer > 0.0:
+		return
+	if _glance_angle == 0.0:
+		_glance_angle = deg_to_rad(randf_range(10.0, 25.0)) * (1.0 if randf() < 0.5 else -1.0)
+		_glance_timer = randf_range(1.0, 2.0)
+	else:
+		_glance_angle = 0.0
+		_glance_timer = randf_range(3.0, 7.0)
+
+
+func _turn_toward(direction: Vector2, turn_speed: float, delta: float) -> void:
 	if direction.length_squared() < 0.0001:
 		return
-	var angle: float = rotate_toward(_facing.angle(), direction.angle(), TURN_SPEED * delta)
+	var angle: float = rotate_toward(_facing.angle(), direction.angle(), turn_speed * delta)
 	_facing = Vector2.from_angle(angle)
 	_apply_facing()
 
