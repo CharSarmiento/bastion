@@ -73,6 +73,11 @@ var _disengaged_time: float = 0.0
 var _last_relocation: PackedFloat64Array = PackedFloat64Array()
 ## true mientras cumple una orden "Avanzar" (cada soldado camina directo a su nuevo sitio).
 var _shifting: bool = false
+## true mientras marcha en retirada combatiendo.
+var _retreating: bool = false
+## true si no debe adelantarse por su cuenta para disparar (tras una retirada, hasta la
+## siguiente orden).
+var _hold_position: bool = false
 
 
 func setup(unit_type: UnitType, squad_members: Array[Soldier]) -> void:
@@ -136,6 +141,8 @@ func order_move(destination: Vector2, facing: Vector2, frontage: float, front_ce
 	_advance_spots.fill(null)
 	_disengaged_time = 0.0
 	_end_shift()
+	_end_retreat()
+	_hold_position = false
 	_plan_deployment(destination, facing, frontage, front_center, front_half_width, occupied)
 	if instant:
 		for i in members.size():
@@ -164,6 +171,8 @@ func order_move(destination: Vector2, facing: Vector2, frontage: float, front_ce
 func order_shift(offset: Vector2, occupied: Array[Vector2]) -> void:
 	_advance_spots.fill(null)
 	_disengaged_time = 0.0
+	_end_retreat()
+	_hold_position = false
 	_state = State.HOLDING
 	_path_pending = false
 	_path.clear()
@@ -189,6 +198,11 @@ func _physics_process(delta: float) -> void:
 			_request_path()
 		if not _path_pending and _time >= _start_time:
 			_advance_anchor(delta)
+	elif _retreating:
+		# Los últimos pasos hasta su puesto también los dan de espaldas si hay enemigos a tiro.
+		_retreat_speed_factor()
+		if is_settled():
+			_end_retreat()
 	elif _shifting:
 		# Mientras avanzan, nadie se adelanta por su cuenta: manda la orden.
 		if is_settled() or _time > _start_time + SHIFT_TIMEOUT:
@@ -196,6 +210,32 @@ func _physics_process(delta: float) -> void:
 	else:
 		_update_advance(delta)
 	_assign_targets()
+
+
+## Convierte la marcha recién ordenada (order_move) en una retirada combatiendo: mientras alguien
+## de la escuadra tenga un enemigo a tiro, retroceden de espaldas disparando; fuera del alcance,
+## corren. Al llegar no se adelantan solos hacia el enemigo.
+func begin_retreat() -> void:
+	_retreating = true
+	_hold_position = true
+
+
+func _end_retreat() -> void:
+	_retreating = false
+	for soldier in members:
+		soldier.backpedal = false
+
+
+## Factor de velocidad de la marcha en retirada según haya o no enemigos a tiro.
+func _retreat_speed_factor() -> float:
+	var in_contact: bool = false
+	for soldier in members:
+		if soldier.current_target() != null:
+			in_contact = true
+			break
+	for soldier in members:
+		soldier.backpedal = in_contact
+	return _unit_type.retreat_backpedal_factor if in_contact else _unit_type.retreat_run_factor
 
 
 func _end_shift() -> void:
@@ -261,6 +301,8 @@ func _request_path() -> void:
 
 func _advance_anchor(delta: float) -> void:
 	var step: float = _speed * _cohesion_factor() * delta
+	if _retreating:
+		step *= _retreat_speed_factor()
 	while step > 0.0 and not _path.is_empty():
 		var to_next: Vector2 = _path[0] - _anchor
 		var distance: float = to_next.length()
@@ -306,7 +348,8 @@ func _assign_targets() -> void:
 func _update_advance(delta: float) -> void:
 	var company: Formation = get_parent()
 	# Durante el avance por saltos nadie se adelanta por su cuenta: manda el salto.
-	if company.bounding:
+	# Tras una retirada, tampoco: no van a volver solos hacia el enemigo.
+	if company.bounding or _hold_position:
 		return
 	if not company.engaged:
 		_disengaged_time += delta

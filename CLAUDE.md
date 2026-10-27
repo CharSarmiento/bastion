@@ -23,15 +23,14 @@ paso 3: enemigos y disparos (hecho) → C. cobertura (hecha) → D. avance por s
 
 Pendiente (ideas del usuario, en este orden; decidir controles con él al llegar):
 1. **"Avanzar"** (hecho, ver "Órdenes").
-2. **Retirada combatiendo**: retroceden sin dejar de disparar hasta salir del alcance enemigo;
-   después se dan la vuelta y corren.
+2. **Retirada combatiendo** (hecha, ver "Órdenes").
 3. **"Mantener posición"**: desactiva el adelantarse solos para disparar.
 Cada orden nueva lleva botón en la barra de órdenes y un atajo de teclado (decisión del usuario).
 Después: cerrar la Fase 1, revisar rendimiento (objetivo 200-300 soldados) y empezar la Fase 2.
 
 ## Órdenes y barra de órdenes
-- `SelectionManager.Order` {MOVE, BOUND, ADVANCE}. Atajos: clic derecho = mover,
-  Ctrl = saltos, Alt = avanzar. La barra (`OrderBar`, CanvasLayer creado por código en
+- `SelectionManager.Order` {MOVE, BOUND, ADVANCE, RETREAT}. Atajos: clic derecho = mover,
+  Ctrl = saltos, Alt = avanzar, Mayús = retirada (Mayús solo selecciona con el botón izquierdo). La barra (`OrderBar`, CanvasLayer creado por código en
   `battle.gd`, abajo en el centro, solo con selección) prepara la orden del siguiente clic
   derecho (`armed_order`); tras usarse vuelve a Mover; Esc la cancela.
 - "Avanzar" (Alt + clic derecho, sin arrastre; vista previa: un punto azul por soldado):
@@ -40,6 +39,13 @@ Después: cerrar la Fase 1, revisar rendimiento (objetivo 200-300 soldados) y em
   normal (`Soldier.speed_factor`), y ahí toma cobertura a ≤ 40 px si la hay (misma prudencia de
   no adelantarse a tiro). Si cae en agua u obstáculo, el sitio válido más cercano. Mientras
   avanzan no se adelantan solos para disparar. Mantienen hacia dónde miraban.
+- Retirada (Mayús + clic derecho, o arrastrar para el frente de llegada; rojo):
+  `Formation.retreat_to()` = `move_to` normal + `Squad.begin_retreat()`. Sin frente dibujado,
+  al llegar miran hacia donde venían. Por escuadra: si alguien tiene objetivo, todos van de
+  espaldas (`Soldier.backpedal`: miran al objetivo, piernas al revés) a
+  `retreat_backpedal_factor` (0,5); si nadie, corren a `retreat_run_factor` (1,4). Al llegar,
+  `_hold_position`: no se adelantan solos hacia el enemigo hasta la siguiente orden
+  (base para la futura orden "Mantener posición").
 
 ## Avance por saltos (etapa D) y supresión
 - Ctrl + clic derecho (o Ctrl + arrastrar el frente): `Formation.move_to(..., bound = true)`.

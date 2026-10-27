@@ -62,6 +62,8 @@ var suppression: float = 0.0
 var max_speed: float = 100.0
 ## Multiplica la velocidad máxima (la escuadra lo baja para que caminen a paso de marcha).
 var speed_factor: float = 1.0
+## Retirada combatiendo: camina de espaldas, mirando al enemigo (lo activa su escuadra).
+var backpedal: bool = false
 var selected: bool = false:
 	set(value):
 		selected = value
@@ -213,10 +215,22 @@ func _physics_process(delta: float) -> void:
 	if walking:
 		# Frena al acercarse al puesto para no pasarse ni temblar.
 		var speed: float = minf(max_speed * speed_factor, slot_distance * 6.0)
+		if backpedal and unit_type:
+			# De espaldas no se puede ir deprisa (con algo de margen para no quedarse atrás).
+			speed = minf(speed, unit_type.move_speed * unit_type.retreat_backpedal_factor * 1.2)
 		global_position += to_goal / distance * minf(speed * delta, distance)
-		_turn_toward(to_goal if slot_distance > FACE_MOVEMENT_DISTANCE else _slot_facing, TURN_SPEED, delta)
+		var walk_scale: float = speed / WALK_ANIM_REFERENCE_SPEED
+		if backpedal:
+			# De espaldas: mira a su objetivo (o hacia atrás) y las piernas andan al revés.
+			var look: Vector2 = _target.global_position - global_position if _has_target() else -to_goal
+			_turn_toward(look, TURN_SPEED, delta)
+			walk_scale = -walk_scale
+		elif slot_distance <= FACE_MOVEMENT_DISTANCE:
+			_turn_toward(_slot_facing, TURN_SPEED, delta)
+		else:
+			_turn_toward(to_goal, TURN_SPEED, delta)
 		_legs.play("walk")
-		_legs.speed_scale = speed / WALK_ANIM_REFERENCE_SPEED
+		_legs.speed_scale = walk_scale
 	else:
 		if _has_target():
 			_turn_toward(_target.global_position - global_position, TURN_SPEED, delta)

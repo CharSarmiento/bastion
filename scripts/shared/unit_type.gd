@@ -64,6 +64,13 @@ extends Resource
 ## Las escuadras corren al saltar: su velocidad se multiplica por este factor.
 @export var bound_speed_factor: float = 1.3
 
+@export_group("Retirada")
+## Mientras alguien de la escuadra tiene un enemigo a tiro, retroceden de espaldas disparando:
+## su velocidad se multiplica por este factor...
+@export var retreat_backpedal_factor: float = 0.5
+## ...y, fuera del alcance enemigo, se dan la vuelta y corren con este otro.
+@export var retreat_run_factor: float = 1.4
+
 @export_group("Despliegue")
 ## Distancia mínima entre soldados al desplegarse, en píxeles.
 @export var deploy_spacing_min: float = 26.0

@@ -9,6 +9,7 @@ const BUTTONS: Array[Array] = [
 	[SelectionManager.Order.MOVE, "Mover  ·  clic dcho"],
 	[SelectionManager.Order.BOUND, "Saltos  ·  Ctrl"],
 	[SelectionManager.Order.ADVANCE, "Avanzar  ·  Alt"],
+	[SelectionManager.Order.RETREAT, "Retirada  ·  Mayús"],
 ]
 const BOTTOM_MARGIN := 12
 

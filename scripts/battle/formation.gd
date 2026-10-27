@@ -77,6 +77,18 @@ func move_to(target: Vector2, new_facing: Vector2 = Vector2.ZERO, width: float =
 		_deploy(target, facing, width, false)
 
 
+## Retirada combatiendo hasta target. Si new_facing es cero, al llegar miran hacia donde venían
+## (hacia el enemigo). Mientras lo tengan a tiro retroceden de espaldas disparando; fuera de su
+## alcance corren. Al llegar no se adelantan solos hacia el enemigo hasta la siguiente orden.
+func retreat_to(target: Vector2, new_facing: Vector2 = Vector2.ZERO, width: float = 0.0) -> void:
+	if new_facing == Vector2.ZERO:
+		var back: Vector2 = global_position - target
+		new_facing = back.normalized() if back.length() > 1.0 else facing
+	move_to(target, new_facing, width)
+	for squad in squads:
+		squad.begin_retreat()
+
+
 ## Orden "Avanzar": toda la compañía se desplaza offset píxeles conservando la colocación de cada
 ## soldado (no se reparte un frente nuevo). Sigue mirando hacia donde miraba.
 func advance_by(offset: Vector2) -> void:

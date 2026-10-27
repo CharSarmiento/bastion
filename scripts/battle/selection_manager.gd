@@ -3,10 +3,10 @@ extends Node2D
 ## Selección de formaciones con clic o recuadro (botón izquierdo; Mayús para añadir).
 ## Botón derecho: un clic mueve; arrastrar dibuja el frente (anchura y hacia dónde miran).
 ## Con Ctrl + botón derecho, la orden es de avance por saltos; con Alt, "Avanzar" (se desplazan
-## conservando su colocación). Las mismas órdenes se pueden preparar con la barra de órdenes:
-## el siguiente clic derecho usa la orden preparada (Esc la cancela).
+## conservando su colocación); con Mayús, retirada combatiendo. Las mismas órdenes se pueden
+## preparar con la barra de órdenes: el siguiente clic derecho usa la orden preparada (Esc la cancela).
 
-enum Order { MOVE, BOUND, ADVANCE }
+enum Order { MOVE, BOUND, ADVANCE, RETREAT }
 
 ## Píxeles de pantalla que hay que arrastrar para que un clic se convierta en arrastre.
 const DRAG_THRESHOLD := 6.0
@@ -19,6 +19,8 @@ const BOX_BORDER := Color(0.45, 1.0, 0.45, 0.9)
 const BOUND_COLOR := Color(1.0, 0.7, 0.3, 0.95)
 ## Color de la orden "Avanzar" (Alt + clic derecho).
 const ADVANCE_COLOR := Color(0.45, 0.8, 1.0, 0.95)
+## Color de la retirada combatiendo (Mayús + clic derecho).
+const RETREAT_COLOR := Color(1.0, 0.45, 0.45, 0.95)
 ## Longitud de la flecha que indica hacia dónde mirará el frente.
 const FACING_ARROW_LENGTH := 36.0
 
@@ -103,20 +105,23 @@ func _handle_right_button(button: InputEventMouseButton) -> void:
 			# "Avanzar" no dibuja frente: va hasta donde se suelta el botón.
 			_order_advance(get_global_mouse_position())
 		elif _right_dragging:
-			_order_front(_right_press_world, get_global_mouse_position(), order == Order.BOUND)
+			_order_front(_right_press_world, get_global_mouse_position(), order)
 		else:
-			_order_move(get_global_mouse_position(), order == Order.BOUND)
+			_order_move(get_global_mouse_position(), order)
 		_right_dragging = false
 		armed_order = Order.MOVE
 		queue_redraw()
 
 
-## Orden que daría ahora un clic derecho: Ctrl = saltos, Alt = avanzar; sin teclas, la preparada.
+## Orden que daría ahora un clic derecho: Ctrl = saltos, Alt = avanzar, Mayús = retirada;
+## sin teclas, la preparada.
 func _current_order() -> Order:
 	if Input.is_key_pressed(KEY_CTRL):
 		return Order.BOUND
 	if Input.is_key_pressed(KEY_ALT):
 		return Order.ADVANCE
+	if Input.is_key_pressed(KEY_SHIFT):
+		return Order.RETREAT
 	return armed_order
 
 
@@ -150,6 +155,8 @@ func _order_color(order: Order) -> Color:
 			return BOUND_COLOR
 		Order.ADVANCE:
 			return ADVANCE_COLOR
+		Order.RETREAT:
+			return RETREAT_COLOR
 	return BOX_BORDER
 
 
@@ -242,15 +249,23 @@ func _set_selection(formations: Array[Formation], additive: bool) -> void:
 
 
 ## Orden simple: mueve las formaciones seleccionadas; si hay varias, conservan su posición relativa.
-## Con bound = true avanzan por saltos.
-func _order_move(target: Vector2, bound: bool) -> void:
+## order puede ser mover, avance por saltos o retirada.
+func _order_move(target: Vector2, order: Order) -> void:
 	_prune_selection()
 	if _selected.is_empty():
 		return
 	var center: Vector2 = _selection_center()
 	for formation in _selected:
-		formation.move_to(target + formation.global_position - center, Vector2.ZERO, 0.0, bound)
-	_markers.append([target, MARKER_DURATION, BOUND_COLOR if bound else BOX_BORDER])
+		_give_move_order(formation, target + formation.global_position - center, Vector2.ZERO, 0.0, order)
+	_markers.append([target, MARKER_DURATION, _order_color(order)])
+
+
+func _give_move_order(formation: Formation, target: Vector2, facing: Vector2, width: float,
+		order: Order) -> void:
+	if order == Order.RETREAT:
+		formation.retreat_to(target, facing, width)
+	else:
+		formation.move_to(target, facing, width, order == Order.BOUND)
 
 
 ## Orden "Avanzar": todas las formaciones seleccionadas se desplazan lo mismo, de modo que el
@@ -266,8 +281,8 @@ func _order_advance(target: Vector2) -> void:
 
 
 ## Orden de frente: cada formación seleccionada recibe su parte de la línea dibujada.
-## Con bound = true avanzan por saltos.
-func _order_front(from: Vector2, to: Vector2, bound: bool) -> void:
+## order puede ser mover, avance por saltos o retirada.
+func _order_front(from: Vector2, to: Vector2, order: Order) -> void:
 	_prune_selection()
 	if _selected.is_empty():
 		return
@@ -276,8 +291,8 @@ func _order_front(from: Vector2, to: Vector2, bound: bool) -> void:
 		var formation: Formation = part[0]
 		var part_from: Vector2 = part[1]
 		var part_to: Vector2 = part[2]
-		formation.move_to((part_from + part_to) / 2.0, facing, part_from.distance_to(part_to), bound)
-	_markers.append([(from + to) / 2.0, MARKER_DURATION, BOUND_COLOR if bound else BOX_BORDER])
+		_give_move_order(formation, (part_from + part_to) / 2.0, facing, part_from.distance_to(part_to), order)
+	_markers.append([(from + to) / 2.0, MARKER_DURATION, _order_color(order)])
 
 
 ## Arrastrar de izquierda a derecha hace mirar "hacia arriba" respecto a la línea.
