@@ -14,6 +14,8 @@ enum Team { PLAYER, ENEMY }
 
 var soldiers: Array[Soldier] = []
 var squads: Array[Squad] = []
+## true si algún soldado de la compañía está disparando a un enemigo (se actualiza cada frame).
+var engaged: bool = false
 var selected: bool = false:
 	set(value):
 		selected = value
@@ -63,8 +65,11 @@ func _physics_process(_delta: float) -> void:
 	if soldiers.is_empty():
 		return
 	var sum := Vector2.ZERO
+	engaged = false
 	for soldier in soldiers:
 		sum += soldier.global_position
+		if not engaged and soldier.current_target() != null:
+			engaged = true
 	global_position = sum / soldiers.size()
 
 

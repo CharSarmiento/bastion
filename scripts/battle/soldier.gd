@@ -119,12 +119,37 @@ func snap_to_slot(slot: Vector2, facing: Vector2) -> void:
 	_apply_facing()
 
 
+## Puesto hacia el que camina (o en el que está).
+func target_slot() -> Vector2:
+	return _slot
+
+
 func distance_to_slot() -> float:
 	return global_position.distance_to(_slot)
 
 
 func is_alive() -> bool:
 	return not _dead
+
+
+## El enemigo al que está disparando ahora mismo, o null si no tiene ninguno a tiro.
+func current_target() -> Soldier:
+	return _target if unit_type and _has_target() else null
+
+
+## El enemigo vivo más cercano a point dentro de max_distance, o null si no hay ninguno.
+func find_nearest_enemy(point: Vector2, max_distance: float) -> Soldier:
+	var best: Soldier = null
+	var best_distance: float = max_distance
+	for node in get_tree().get_nodes_in_group("soldiers"):
+		var other: Soldier = node
+		if other.team == team or not other.is_alive():
+			continue
+		var distance: float = point.distance_to(other.global_position)
+		if distance <= best_distance:
+			best = other
+			best_distance = distance
+	return best
 
 
 func take_damage(amount: float) -> void:
@@ -182,7 +207,7 @@ func _update_combat(delta: float, walking: bool) -> void:
 	_target_timer -= delta
 	if _target_timer <= 0.0:
 		_target_timer = TARGET_CHECK_INTERVAL
-		_target = _find_target()
+		_target = find_nearest_enemy(global_position, unit_type.weapon_range)
 	if not _has_target():
 		_target = null
 	_fire_cooldown -= delta
@@ -212,21 +237,6 @@ func _update_aim(delta: float) -> void:
 func _has_target() -> bool:
 	return is_instance_valid(_target) and _target.is_alive() \
 		and global_position.distance_to(_target.global_position) <= unit_type.weapon_range * 1.1
-
-
-## El enemigo vivo más cercano dentro del alcance (de momento sin comprobar línea de visión).
-func _find_target() -> Soldier:
-	var best: Soldier = null
-	var best_distance: float = unit_type.weapon_range
-	for node in get_tree().get_nodes_in_group("soldiers"):
-		var other: Soldier = node
-		if other.team == team or not other.is_alive():
-			continue
-		var distance: float = global_position.distance_to(other.global_position)
-		if distance <= best_distance:
-			best = other
-			best_distance = distance
-	return best
 
 
 func _fire_at(target: Soldier, walking: bool) -> void:

@@ -30,7 +30,15 @@ paso 3: enemigos y disparos (hecho) → **C. cobertura** → D. avance por salto
 - Al morir: animación `Death`, el cuerpo pasa al nodo `Corpses` (grupo "corpses") y la
   compañía lo quita de su escuadra; sin soldados, la compañía desaparece.
 - Enemigos: `team = ENEMY`, teñidos con `scenes/battle/team_tint.gdshader` (verde → gris azulado).
-- Los enemigos de la Fase 1 no se mueven, pero devuelven el fuego.
+- Los enemigos de la Fase 1 no reciben órdenes, pero devuelven el fuego.
+- Acercarse para disparar (idea del usuario): si alguien de la compañía combate
+  (`Formation.engaged`), los soldados que no llegan se adelantan hasta ponerse a tiro, como mucho
+  `advance_leash` px desde su puesto y respetando la separación mínima
+  (`Squad._update_advance()`). Vuelven a su puesto tras 2 s sin combate o con una orden nueva.
+  Afecta a los dos bandos (el usuario lo quiere así: da sensación de iniciativa).
+  Pendiente: orden "Mantener posición" que lo desactive.
+- Dificultad: ahora es exigente y al usuario le gusta. El balance fino (puntería, vida, cadencia,
+  correa) se deja para el final; no ajustarlo sin que lo pida.
 
 ## Movimiento de infantería moderna (prioridad del usuario)
 Nada de bloques rígidos del siglo XIX: las unidades se mueven sueltas y con independencia.

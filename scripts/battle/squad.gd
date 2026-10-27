@@ -18,6 +18,14 @@ const MIN_SPEED_FACTOR := 0.3
 const CATCH_UP_FACTOR := 1.6
 ## Intentos para encontrar cada punto de despliegue antes de relajar la distancia mínima.
 const DEPLOY_ATTEMPTS := 40
+## Cada cuánto (segundos) revisa si algún soldado debe adelantarse para poder disparar.
+const ADVANCE_CHECK_INTERVAL := 0.5
+## Al adelantarse, se queda a esta fracción del alcance del enemigo (algo dentro, no al límite).
+const ADVANCE_RANGE_FACTOR := 0.85
+## Ángulos (grados) alrededor del enemigo que prueba al adelantarse, del más directo al menos.
+const ADVANCE_ANGLE_OFFSETS: Array[float] = [0.0, 12.0, -12.0, 24.0, -24.0, 36.0, -36.0]
+## Segundos sin que nadie de la compañía combata antes de volver a los puestos.
+const DISENGAGE_DELAY := 2.0
 
 var members: Array[Soldier] = []
 
@@ -40,6 +48,11 @@ var _trail_distances: PackedFloat64Array = PackedFloat64Array()
 ## Punto de despliegue y dirección de vigilancia de cada soldado.
 var _spots: PackedVector2Array = PackedVector2Array()
 var _spot_facings: PackedVector2Array = PackedVector2Array()
+## Por soldado: punto al que se ha adelantado para poder disparar (Vector2), o null si está
+## en su puesto.
+var _advance_spots: Array = []
+var _advance_timer: float = 0.0
+var _disengaged_time: float = 0.0
 
 
 func setup(unit_type: UnitType, squad_members: Array[Soldier]) -> void:
@@ -49,6 +62,7 @@ func setup(unit_type: UnitType, squad_members: Array[Soldier]) -> void:
 	_speed = _unit_type.move_speed
 	_release_times.resize(members.size())
 	_trail_distances.resize(members.size())
+	_advance_spots.resize(members.size())
 	for i in members.size():
 		_trail_distances[i] = i * _unit_type.march_spacing + _rng.randf_range(-4.0, 4.0)
 		members[i].max_speed = _unit_type.move_speed * CATCH_UP_FACTOR \
@@ -63,6 +77,7 @@ func remove_member(soldier: Soldier) -> void:
 	members.remove_at(index)
 	_release_times.remove_at(index)
 	_trail_distances.remove_at(index)
+	_advance_spots.remove_at(index)
 	if index < _spots.size():
 		_spots.remove_at(index)
 		_spot_facings.remove_at(index)
@@ -83,6 +98,9 @@ func center() -> Vector2:
 func order_move(destination: Vector2, facing: Vector2, frontage: float, front_center: Vector2,
 		front_half_width: float, occupied: Array[Vector2], instant: bool) -> void:
 	_destination = destination
+	# Una orden nueva manda: nadie sigue adelantado por su cuenta.
+	_advance_spots.fill(null)
+	_disengaged_time = 0.0
 	_plan_deployment(destination, facing, frontage, front_center, front_half_width, occupied)
 	if instant:
 		for i in members.size():
@@ -114,6 +132,8 @@ func _physics_process(delta: float) -> void:
 			_request_path()
 		if not _path_pending and _time >= _start_time:
 			_advance_anchor(delta)
+	else:
+		_update_advance(delta)
 	_assign_targets()
 
 
@@ -171,9 +191,65 @@ func _assign_targets() -> void:
 			continue  # todavía no ha reaccionado a la orden: sigue donde estaba
 		var soldier: Soldier = members[i]
 		if _state == State.HOLDING:
-			soldier.set_slot(_spots[i], _spot_facings[i])
+			var spot: Vector2 = _spots[i] if _advance_spots[i] == null else _advance_spots[i]
+			soldier.set_slot(spot, _spot_facings[i])
 		else:
 			soldier.set_slot(_march_position(i), _march_facing())
+
+
+## Si alguien de la compañía está combatiendo, los que no llegan a disparar se adelantan
+## (como mucho advance_leash desde su puesto) hasta ponerse a tiro. Cuando la compañía deja de
+## combatir durante un rato, todos vuelven a sus puestos.
+func _update_advance(delta: float) -> void:
+	var company: Formation = get_parent()
+	if not company.engaged:
+		_disengaged_time += delta
+		if _disengaged_time >= DISENGAGE_DELAY:
+			_advance_spots.fill(null)
+		return
+	_disengaged_time = 0.0
+	_advance_timer -= delta
+	if _advance_timer > 0.0:
+		return
+	_advance_timer = ADVANCE_CHECK_INTERVAL
+	for i in members.size():
+		# El que ya dispara se queda donde está (en su puesto o adelantado).
+		if _time >= _release_times[i] and members[i].current_target() == null:
+			_advance_spots[i] = _advance_position(i)
+
+
+## Punto desde el que ya tendría a tiro al enemigo más cercano, o null si para eso tendría que
+## adelantarse más de lo permitido. Prueba primero el camino recto hacia el enemigo y, si ese
+## punto queda pegado a un compañero, otros ángulos alrededor del enemigo.
+func _advance_position(index: int) -> Variant:
+	var spot: Vector2 = _spots[index]
+	var reach: float = _unit_type.weapon_range * ADVANCE_RANGE_FACTOR
+	var enemy: Soldier = members[index].find_nearest_enemy(spot, reach + _unit_type.advance_leash)
+	if enemy == null or spot.distance_to(enemy.global_position) <= reach:
+		return null
+	var from_enemy: Vector2 = (spot - enemy.global_position).normalized()
+	for degrees in ADVANCE_ANGLE_OFFSETS:
+		var point: Vector2 = enemy.global_position + from_enemy.rotated(deg_to_rad(degrees)) * reach
+		if spot.distance_to(point) > _unit_type.advance_leash:
+			continue
+		if _map_ready():
+			var walkable: Vector2 = NavigationServer2D.map_get_closest_point(_map(), point)
+			# Si el punto cae en el agua, no sirve.
+			if walkable.distance_to(point) > 8.0:
+				continue
+			point = walkable
+		if _is_spot_free(point, members[index]):
+			return point
+	return null
+
+
+## true si ningún otro soldado de la compañía va a quedar demasiado cerca de point.
+func _is_spot_free(point: Vector2, who: Soldier) -> bool:
+	var company: Formation = get_parent()
+	for other in company.soldiers:
+		if other != who and other.target_slot().distance_to(point) < _unit_type.deploy_spacing_min:
+			return false
+	return true
 
 
 ## Puesto en la fila: un punto del rastro a cierta distancia tras el ancla, un poco a un lado.

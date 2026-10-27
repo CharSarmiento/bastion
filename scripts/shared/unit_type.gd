@@ -29,6 +29,9 @@ extends Resource
 @export_range(0.0, 1.0) var moving_accuracy_factor: float = 0.4
 ## ...y el tiempo entre disparos por este otro.
 @export var moving_fire_interval_factor: float = 1.5
+## Si su escuadra está combatiendo y un soldado no llega a disparar, se adelanta desde su
+## puesto como mucho esta distancia (píxeles) para ponerse a tiro. 0 = nunca se adelanta.
+@export var advance_leash: float = 160.0
 
 @export_group("Marcha")
 ## Distancia entre soldados de una escuadra cuando marchan en fila, en píxeles.
