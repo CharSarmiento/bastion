@@ -75,13 +75,17 @@ Cada unidad del jugador es una formación con soldados o vehículos dentro. Se s
 
 ### Órdenes
 
-1. **Mover** a un punto (clic derecho). Con modificador: movimiento rápido o sigiloso.
+1. **Mover** a un punto (clic derecho). Arrastrando con el clic derecho se dibuja el frente: su anchura y hacia dónde mira la unidad. Con modificador: movimiento rápido o sigiloso.
 2. **Atacar** una unidad enemiga concreta.
 3. **Mantener posición**: no persigue, dispara a lo que entre en rango.
 4. **Retirarse** hacia el borde propio del mapa; preserva tropas a cambio de ceder terreno.
-5. **Cambiar formación** (línea, columna, dispersa), que afecta frente de fuego, velocidad y vulnerabilidad a explosivos.
+5. **Cambiar formación**: disposición de las escuadras (en línea, en cuña o en columna), que afecta frente de fuego, velocidad y vulnerabilidad a explosivos.
 
-Los soldados dentro de la unidad mantienen su puesto en la formación, buscan la cobertura más cercana a ese puesto y disparan por su cuenta al enemigo visible.
+Los soldados dentro de la unidad buscan la cobertura más cercana a su puesto y disparan por su cuenta al enemigo visible.
+
+### Movimiento de infantería moderna
+
+Nada de bloques rígidos: las unidades se mueven sueltas, como una unidad moderna. Cada compañía se divide sola en escuadras de 4–6 soldados. Al recibir una orden, las escuadras reaccionan escalonadamente, marchan en fila suelta siguiendo a su jefe y, al llegar, se despliegan dispersas a lo largo del frente, con cada soldado vigilando su sector. Cada escuadra elige su propia ruta, aunque eso las lleve por cruces distintos: el jugador manda la compañía, no las escuadras.
 
 ### Terreno y cobertura
 

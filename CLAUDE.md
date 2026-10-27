@@ -25,7 +25,8 @@ paso 3: enemigos y disparos → C. cobertura → D. avance por saltos.
 Nada de bloques rígidos del siglo XIX: las unidades se mueven sueltas y con independencia.
 - Jerarquía: compañía (`Formation`, la que manda el jugador) → escuadras (`Squad`, automáticas,
   `squad_size` soldados) → soldados (`Soldier`). El jugador nunca manda escuadras sueltas.
-- Cada escuadra calcula su propia ruta. Un punto guía ("ancla") la recorre y deja un rastro;
+- Cada escuadra calcula su propia ruta, aunque las escuadras acaben cruzando por sitios distintos
+  (decisión del usuario: se queda así). Un punto guía ("ancla") la recorre y deja un rastro;
   los soldados marchan en fila suelta sobre ese rastro, así cruzan puentes en fila.
 - Reacción escalonada (retraso por escuadra y por soldado) y velocidades con variación.
 - Al llegar, `Squad._plan_deployment()` elige puntos dispersos e irregulares en el tramo del
