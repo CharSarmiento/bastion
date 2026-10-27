@@ -75,6 +75,9 @@ func _spawn() -> void:
 		# top_level: el soldado no se mueve automáticamente con el nodo de la formación;
 		# camina él solo hacia su puesto.
 		soldier.top_level = true
+		soldier.unit_type = unit_type
+		soldier.team = team
+		soldier.died.connect(_on_soldier_died)
 		add_child(soldier)
 		soldier.global_position = start
 		soldiers.append(soldier)
@@ -85,6 +88,21 @@ func _spawn() -> void:
 		squad.setup(unit_type, soldiers.slice(first, first + unit_type.squad_size))
 		squads.append(squad)
 	_deploy(start, facing, unit_type.default_front_width, true)
+
+
+## Quita al caído de la compañía y de su escuadra. Si no queda nadie, la compañía desaparece
+## (los cuerpos se quedan en el mapa: ya no son hijos de la compañía).
+func _on_soldier_died(soldier: Soldier) -> void:
+	soldiers.erase(soldier)
+	for squad in squads:
+		if soldier in squad.members:
+			squad.remove_member(soldier)
+			if squad.members.is_empty():
+				squads.erase(squad)
+				squad.queue_free()
+			break
+	if soldiers.is_empty():
+		queue_free.call_deferred()
 
 
 ## Divide el frente en un tramo por escuadra y se los reparte sin que se crucen:

@@ -18,8 +18,19 @@ Mapa de prueba, una compañía propia y dos enemigas quietas. Selección (clic o
 movimiento con clic derecho, disparo automático al enemigo en rango.
 Listo cuando: mover y disparar se siente bien.
 
-Orden de trabajo acordado: pasos 1-2 hechos → **A. movimiento moderno** (hecho) →
-paso 3: enemigos y disparos → C. cobertura → D. avance por saltos.
+Orden de trabajo acordado: pasos 1-2 hechos → A. movimiento moderno (hecho) →
+paso 3: enemigos y disparos (hecho) → **C. cobertura** → D. avance por saltos.
+
+## Combate (paso 3)
+- Cada `Soldier` busca 2 veces/s al enemigo vivo más cercano dentro de `weapon_range`
+  (aún sin línea de visión) y dispara solo. Piernas y torso giran por separado: el torso apunta
+  y puede disparar en marcha (puntería × `moving_accuracy_factor`).
+- Disparo instantáneo: probabilidad según `accuracy` y distancia; trazadora en `BattleEffects`
+  (un solo nodo dibuja todas). Pose `shot_texture` con fogonazo.
+- Al morir: animación `Death`, el cuerpo pasa al nodo `Corpses` (grupo "corpses") y la
+  compañía lo quita de su escuadra; sin soldados, la compañía desaparece.
+- Enemigos: `team = ENEMY`, teñidos con `scenes/battle/team_tint.gdshader` (verde → gris azulado).
+- Los enemigos de la Fase 1 no se mueven, pero devuelven el fuego.
 
 ## Movimiento de infantería moderna (prioridad del usuario)
 Nada de bloques rígidos del siglo XIX: las unidades se mueven sueltas y con independencia.

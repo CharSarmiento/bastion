@@ -55,6 +55,21 @@ func setup(unit_type: UnitType, squad_members: Array[Soldier]) -> void:
 			* _rng.randf_range(1.0 - _unit_type.speed_variation, 1.0 + _unit_type.speed_variation)
 
 
+## Quita a un soldado caído. El resto sigue con sus puestos y cierra la fila de marcha.
+func remove_member(soldier: Soldier) -> void:
+	var index: int = members.find(soldier)
+	if index == -1:
+		return
+	members.remove_at(index)
+	_release_times.remove_at(index)
+	_trail_distances.remove_at(index)
+	if index < _spots.size():
+		_spots.remove_at(index)
+		_spot_facings.remove_at(index)
+	for i in _trail_distances.size():
+		_trail_distances[i] = i * _unit_type.march_spacing + _rng.randf_range(-4.0, 4.0)
+
+
 func center() -> Vector2:
 	var sum := Vector2.ZERO
 	for soldier in members:

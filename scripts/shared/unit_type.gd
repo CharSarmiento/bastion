@@ -13,6 +13,23 @@ extends Resource
 ## Velocidad de marcha, en píxeles por segundo.
 @export var move_speed: float = 70.0
 
+@export_group("Combate")
+## Vida de cada soldado.
+@export var soldier_health: float = 100.0
+## Alcance del arma, en píxeles (una casilla = 64).
+@export var weapon_range: float = 320.0
+## Daño de cada impacto.
+@export var damage: float = 35.0
+## Probabilidad de acertar a quemarropa (0-1); baja con la distancia.
+@export_range(0.0, 1.0) var accuracy: float = 0.35
+## Tiempo entre disparos de un soldado, en segundos (se elige al azar entre mínimo y máximo).
+@export var fire_interval_min: float = 1.4
+@export var fire_interval_max: float = 2.6
+## Al disparar caminando: la puntería se multiplica por este factor...
+@export_range(0.0, 1.0) var moving_accuracy_factor: float = 0.4
+## ...y el tiempo entre disparos por este otro.
+@export var moving_fire_interval_factor: float = 1.5
+
 @export_group("Marcha")
 ## Distancia entre soldados de una escuadra cuando marchan en fila, en píxeles.
 @export var march_spacing: float = 28.0

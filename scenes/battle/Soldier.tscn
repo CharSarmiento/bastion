@@ -1,6 +1,7 @@
 [gd_scene format=3]
 
 [ext_resource type="Script" path="res://scripts/battle/soldier.gd" id="1_cecuy"]
+[ext_resource type="Texture2D" path="res://assets/units/infantry/rifleman/shot.png" id="2_go21t"]
 [ext_resource type="Texture2D" path="res://assets/units/infantry/rifleman/walk_01.png" id="2_tekyw"]
 [ext_resource type="Texture2D" path="res://assets/units/infantry/rifleman/walk_02.png" id="3_b58g6"]
 [ext_resource type="Texture2D" path="res://assets/units/infantry/rifleman/walk_03.png" id="4_y6ttc"]
@@ -9,6 +10,10 @@
 [ext_resource type="Texture2D" path="res://assets/units/infantry/rifleman/walk_06.png" id="7_xwvsi"]
 [ext_resource type="Texture2D" path="res://assets/units/infantry/rifleman/walk_07.png" id="8_7juji"]
 [ext_resource type="Texture2D" path="res://assets/units/infantry/rifleman/body.png" id="9_p41i2"]
+[ext_resource type="Texture2D" path="res://assets/units/infantry/rifleman/die_01.png" id="11_xwvsi"]
+[ext_resource type="Texture2D" path="res://assets/units/infantry/rifleman/die_02.png" id="12_7juji"]
+[ext_resource type="Texture2D" path="res://assets/units/infantry/rifleman/die_03.png" id="13_p41i2"]
+[ext_resource type="Texture2D" path="res://assets/units/infantry/rifleman/die_04.png" id="14_4saq7"]
 
 [sub_resource type="SpriteFrames" id="SpriteFrames_4saq7"]
 animations = [{
@@ -39,8 +44,29 @@ animations = [{
 "speed": 10.0
 }]
 
+[sub_resource type="SpriteFrames" id="SpriteFrames_ieved"]
+animations = [{
+"frames": [{
+"duration": 1.0,
+"texture": ExtResource("11_xwvsi")
+}, {
+"duration": 1.0,
+"texture": ExtResource("12_7juji")
+}, {
+"duration": 1.0,
+"texture": ExtResource("13_p41i2")
+}, {
+"duration": 1.0,
+"texture": ExtResource("14_4saq7")
+}],
+"loop": 0,
+"name": &"die",
+"speed": 8.0
+}]
+
 [node name="Soldier" type="Node2D" unique_id=1919043682]
 script = ExtResource("1_cecuy")
+shot_texture = ExtResource("2_go21t")
 
 [node name="Visual" type="Node2D" parent="." unique_id=30798270]
 
@@ -50,3 +76,8 @@ animation = &"walk"
 
 [node name="Body" type="Sprite2D" parent="Visual" unique_id=1240078996]
 texture = ExtResource("9_p41i2")
+
+[node name="Death" type="AnimatedSprite2D" parent="Visual" unique_id=1662894348]
+visible = false
+sprite_frames = SubResource("SpriteFrames_ieved")
+animation = &"die"
