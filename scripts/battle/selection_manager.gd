@@ -5,6 +5,7 @@ extends Node2D
 ## Con Ctrl + botón derecho, la orden es de avance por saltos; con Alt, "Avanzar" (se desplazan
 ## conservando su colocación); con Mayús, retirada combatiendo. Las mismas órdenes se pueden
 ## preparar con la barra de órdenes: el siguiente clic derecho usa la orden preparada (Esc la cancela).
+## La tecla H activa o desactiva "Mantener posición" en la selección.
 
 enum Order { MOVE, BOUND, ADVANCE, RETREAT }
 
@@ -53,6 +54,24 @@ func arm(order: Order) -> void:
 	queue_redraw()
 
 
+## true si todas las formaciones seleccionadas tienen activado "Mantener posición".
+func selection_holds() -> bool:
+	_prune_selection()
+	if _selected.is_empty():
+		return false
+	for formation in _selected:
+		if not formation.hold_position:
+			return false
+	return true
+
+
+## Activa "Mantener posición" en la selección o, si ya lo tenían todas, lo desactiva.
+func toggle_hold() -> void:
+	var value: bool = not selection_holds()
+	for formation in _selected:
+		formation.hold_position = value
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var button: InputEventMouseButton = event
@@ -72,6 +91,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		var key: InputEventKey = event
 		if key.pressed and key.keycode == KEY_ESCAPE:
 			arm(Order.MOVE)
+		elif key.pressed and not key.echo and key.keycode == KEY_H:
+			toggle_hold()
 		# Pulsar o soltar Ctrl o Alt cambia la vista previa.
 		queue_redraw()
 

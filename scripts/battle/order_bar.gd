@@ -18,6 +18,8 @@ var selection_manager: SelectionManager
 var _panel: PanelContainer
 ## Orden -> botón.
 var _buttons: Dictionary = {}
+## Interruptor "Mantener posición": encendido si toda la selección lo tiene activado.
+var _hold_button: Button
 
 
 func _ready() -> void:
@@ -44,6 +46,13 @@ func _ready() -> void:
 		button.pressed.connect(_on_button_pressed.bind(order))
 		row.add_child(button)
 		_buttons[order] = button
+	row.add_child(VSeparator.new())
+	_hold_button = Button.new()
+	_hold_button.text = "Mantener posición  ·  H"
+	_hold_button.toggle_mode = true
+	_hold_button.focus_mode = Control.FOCUS_NONE
+	_hold_button.pressed.connect(func() -> void: selection_manager.toggle_hold())
+	row.add_child(_hold_button)
 
 
 func _process(_delta: float) -> void:
@@ -53,6 +62,7 @@ func _process(_delta: float) -> void:
 	for order: SelectionManager.Order in _buttons:
 		var button: Button = _buttons[order]
 		button.set_pressed_no_signal(order == selection_manager.armed_order)
+	_hold_button.set_pressed_no_signal(selection_manager.selection_holds())
 
 
 func _on_button_pressed(order: SelectionManager.Order) -> void:

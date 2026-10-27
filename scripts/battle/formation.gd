@@ -26,6 +26,9 @@ var squads: Array[Squad] = []
 var engaged: bool = false
 ## true mientras dura un avance por saltos.
 var bounding: bool = false
+## "Mantener posición" (interruptor del jugador, tecla H): nadie se adelanta por su cuenta para
+## disparar. Dura hasta que se desactive, aunque la compañía reciba otras órdenes.
+var hold_position: bool = false
 var selected: bool = false:
 	set(value):
 		selected = value

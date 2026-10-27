@@ -348,8 +348,7 @@ func _assign_targets() -> void:
 func _update_advance(delta: float) -> void:
 	var company: Formation = get_parent()
 	# Durante el avance por saltos nadie se adelanta por su cuenta: manda el salto.
-	# Tras una retirada, tampoco: no van a volver solos hacia el enemigo.
-	if company.bounding or _hold_position:
+	if company.bounding:
 		return
 	if not company.engaged:
 		_disengaged_time += delta
@@ -357,6 +356,10 @@ func _update_advance(delta: float) -> void:
 			_advance_spots.fill(null)
 		return
 	_disengaged_time = 0.0
+	# Con "Mantener posición", o tras una retirada, tampoco: se quedan donde están (si alguien
+	# ya se había adelantado, sigue allí hasta que acabe el combate).
+	if company.hold_position or _hold_position:
+		return
 	_advance_timer -= delta
 	if _advance_timer > 0.0:
 		return

@@ -24,7 +24,7 @@ paso 3: enemigos y disparos (hecho) → C. cobertura (hecha) → D. avance por s
 Pendiente (ideas del usuario, en este orden; decidir controles con él al llegar):
 1. **"Avanzar"** (hecho, ver "Órdenes").
 2. **Retirada combatiendo** (hecha, ver "Órdenes").
-3. **"Mantener posición"**: desactiva el adelantarse solos para disparar.
+3. **"Mantener posición"** (hecha, ver "Órdenes").
 Cada orden nueva lleva botón en la barra de órdenes y un atajo de teclado (decisión del usuario).
 Después: cerrar la Fase 1, revisar rendimiento (objetivo 200-300 soldados) y empezar la Fase 2.
 
@@ -45,7 +45,11 @@ Después: cerrar la Fase 1, revisar rendimiento (objetivo 200-300 soldados) y em
   espaldas (`Soldier.backpedal`: miran al objetivo, piernas al revés) a
   `retreat_backpedal_factor` (0,5); si nadie, corren a `retreat_run_factor` (1,4). Al llegar,
   `_hold_position`: no se adelantan solos hacia el enemigo hasta la siguiente orden
-  (base para la futura orden "Mantener posición").
+  (mismo efecto que "Mantener posición", pero solo hasta la siguiente orden).
+- "Mantener posición" (tecla H o botón de la barra): interruptor permanente por compañía
+  (`Formation.hold_position`, decisión del usuario), no se apaga con otras órdenes. Con él,
+  `_update_advance()` no adelanta a nadie; quien ya estuviera adelantado vuelve a su puesto al
+  acabar el combate. Si hay varias seleccionadas: se activa en todas salvo que ya lo tuvieran.
 
 ## Avance por saltos (etapa D) y supresión
 - Ctrl + clic derecho (o Ctrl + arrastrar el frente): `Formation.move_to(..., bound = true)`.
@@ -98,7 +102,7 @@ Después: cerrar la Fase 1, revisar rendimiento (objetivo 200-300 soldados) y em
   `advance_leash` px desde su puesto y respetando la separación mínima
   (`Squad._update_advance()`). Vuelven a su puesto tras 2 s sin combate o con una orden nueva.
   Afecta a los dos bandos (el usuario lo quiere así: da sensación de iniciativa).
-  Pendiente: orden "Mantener posición" que lo desactive.
+  Se desactiva con "Mantener posición" (tecla H).
 - Dificultad: ahora es exigente y al usuario le gusta. El balance fino (puntería, vida, cadencia,
   correa) se deja para el final; no ajustarlo sin que lo pida.
 
