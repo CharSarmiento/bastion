@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="UnitType" format=3]
+
+[ext_resource type="Script" path="res://scripts/shared/unit_type.gd" id="1_rjyeo"]
+[ext_resource type="PackedScene" path="res://scenes/battle/Soldier.tscn" id="2_rsi47"]
+
+[resource]
+script = ExtResource("1_rjyeo")
+display_name = "Compañía de fusileros"
+soldier_scene = ExtResource("2_rsi47")

@@ -1,0 +1,52 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/battle/soldier.gd" id="1_cecuy"]
+[ext_resource type="Texture2D" path="res://assets/units/infantry/rifleman/walk_01.png" id="2_tekyw"]
+[ext_resource type="Texture2D" path="res://assets/units/infantry/rifleman/walk_02.png" id="3_b58g6"]
+[ext_resource type="Texture2D" path="res://assets/units/infantry/rifleman/walk_03.png" id="4_y6ttc"]
+[ext_resource type="Texture2D" path="res://assets/units/infantry/rifleman/walk_04.png" id="5_qyd6c"]
+[ext_resource type="Texture2D" path="res://assets/units/infantry/rifleman/walk_05.png" id="6_go21t"]
+[ext_resource type="Texture2D" path="res://assets/units/infantry/rifleman/walk_06.png" id="7_xwvsi"]
+[ext_resource type="Texture2D" path="res://assets/units/infantry/rifleman/walk_07.png" id="8_7juji"]
+[ext_resource type="Texture2D" path="res://assets/units/infantry/rifleman/body.png" id="9_p41i2"]
+
+[sub_resource type="SpriteFrames" id="SpriteFrames_4saq7"]
+animations = [{
+"frames": [{
+"duration": 1.0,
+"texture": ExtResource("2_tekyw")
+}, {
+"duration": 1.0,
+"texture": ExtResource("3_b58g6")
+}, {
+"duration": 1.0,
+"texture": ExtResource("4_y6ttc")
+}, {
+"duration": 1.0,
+"texture": ExtResource("5_qyd6c")
+}, {
+"duration": 1.0,
+"texture": ExtResource("6_go21t")
+}, {
+"duration": 1.0,
+"texture": ExtResource("7_xwvsi")
+}, {
+"duration": 1.0,
+"texture": ExtResource("8_7juji")
+}],
+"loop": 1,
+"name": &"walk",
+"speed": 10.0
+}]
+
+[node name="Soldier" type="Node2D" unique_id=1919043682]
+script = ExtResource("1_cecuy")
+
+[node name="Visual" type="Node2D" parent="." unique_id=30798270]
+
+[node name="Legs" type="AnimatedSprite2D" parent="Visual" unique_id=1537740310]
+sprite_frames = SubResource("SpriteFrames_4saq7")
+animation = &"walk"
+
+[node name="Body" type="Sprite2D" parent="Visual" unique_id=1240078996]
+texture = ExtResource("9_p41i2")

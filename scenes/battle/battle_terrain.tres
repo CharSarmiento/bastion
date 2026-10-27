@@ -1,0 +1,37 @@
+[gd_resource type="TileSet" format=3 uid="uid://cwx5y5hs53xgd"]
+
+[ext_resource type="Texture2D" uid="uid://ds04sky83ngfj" path="res://assets/terrain/tiles/tiles.png" id="1_pxaja"]
+[ext_resource type="Texture2D" uid="uid://8lkcox58r7be" path="res://assets/terrain/tiles/bridge.png" id="2_2awju"]
+
+[sub_resource type="NavigationPolygon" id="NavigationPolygon_uianj"]
+vertices = PackedVector2Array(-32, -32, 32, -32, 32, 32, -32, 32)
+polygons = Array[PackedInt32Array]([PackedInt32Array(0, 1, 2, 3)])
+
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_3s5se"]
+texture = ExtResource("1_pxaja")
+texture_region_size = Vector2i(64, 64)
+0:0/0 = 0
+0:1/0 = 0
+0:1/0/navigation_layer_0/polygon = SubResource("NavigationPolygon_uianj")
+0:2/0 = 0
+0:2/0/navigation_layer_0/polygon = SubResource("NavigationPolygon_uianj")
+0:3/0 = 0
+0:3/0/navigation_layer_0/polygon = SubResource("NavigationPolygon_uianj")
+0:4/0 = 0
+0:4/0/navigation_layer_0/polygon = SubResource("NavigationPolygon_uianj")
+
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_vjs2c"]
+texture = ExtResource("2_2awju")
+texture_region_size = Vector2i(64, 64)
+0:0/0 = 0
+0:0/0/navigation_layer_0/polygon = SubResource("NavigationPolygon_uianj")
+0:1/0 = 0
+0:1/0/navigation_layer_0/polygon = SubResource("NavigationPolygon_uianj")
+0:2/0 = 0
+0:2/0/navigation_layer_0/polygon = SubResource("NavigationPolygon_uianj")
+
+[resource]
+tile_size = Vector2i(64, 64)
+navigation_layer_0/layers = 1
+sources/0 = SubResource("TileSetAtlasSource_3s5se")
+sources/1 = SubResource("TileSetAtlasSource_vjs2c")

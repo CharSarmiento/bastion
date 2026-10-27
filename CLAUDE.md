@@ -22,8 +22,13 @@ Listo cuando: mover y disparar se siente bien.
 - Casilla de terreno 64×64 (assets/terrain/tiles/tiles.png: agua, césped, arena, tierra, asfalto).
   Filtro de textura: Nearest (pixel art).
 - PNG sueltos, un archivo por fotograma (`walk_01.png`, `walk_02.png`…); no hay sprite sheets.
-- Todos los sprites miran hacia arriba (norte); la rotación se hace por código.
-- Soldados por capas: piernas (walk, 7 fr, 96×96) + torso/arma (64×64). Lienzos de distinto tamaño.
+- Todos los sprites miran hacia ABAJO (sur): cañones y fusiles apuntan a +Y. Al girar hacia una
+  dirección `dir`: `rotation = dir.angle() - PI / 2`.
+- Soldados por capas: piernas (walk, 7 fr, 96×96) + torso con fusil (body, 64×64); disparo 128×128.
+  Todas las capas están dibujadas centradas en su lienzo: se apilan con el mismo centro.
+  Figura real del soldado: unos 20×28 px.
 - Vehículos: casco + torreta separados (128×128).
 - Solo existe el bando verde; el enemigo se distingue tiñendo con shader.
 - Fuentes de Photoshop, portadas y licencia en _fuentes/ (ignorada por Godot).
+- Como assets/ no está en git, nunca guardes archivos propios (.tres, .tscn, shaders) dentro de
+  assets/: van en scenes/, scripts/ o data/.
