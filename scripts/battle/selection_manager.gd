@@ -2,6 +2,7 @@ class_name SelectionManager
 extends Node2D
 ## Selección de formaciones con clic o recuadro (botón izquierdo; Mayús para añadir).
 ## Botón derecho: un clic mueve; arrastrar dibuja el frente (anchura y hacia dónde miran).
+## Con Ctrl + botón derecho, la orden es de avance por saltos.
 
 ## Píxeles de pantalla que hay que arrastrar para que un clic se convierta en arrastre.
 const DRAG_THRESHOLD := 6.0
@@ -10,6 +11,8 @@ const CLICK_RADIUS := 16.0
 const MARKER_DURATION := 0.6
 const BOX_FILL := Color(0.45, 1.0, 0.45, 0.12)
 const BOX_BORDER := Color(0.45, 1.0, 0.45, 0.9)
+## Color de las órdenes de avance por saltos (Ctrl + clic derecho).
+const BOUND_COLOR := Color(1.0, 0.7, 0.3, 0.95)
 ## Longitud de la flecha que indica hacia dónde mirará el frente.
 const FACING_ARROW_LENGTH := 36.0
 
@@ -43,6 +46,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			_right_dragging = true
 		if _left_pressing or _right_pressing:
 			queue_redraw()
+	elif event is InputEventKey and _right_dragging:
+		# Pulsar o soltar Ctrl mientras se arrastra cambia el color de la vista previa.
+		queue_redraw()
 
 
 func _handle_left_button(button: InputEventMouseButton) -> void:
@@ -69,10 +75,11 @@ func _handle_right_button(button: InputEventMouseButton) -> void:
 		_right_press_world = get_global_mouse_position()
 	elif _right_pressing:
 		_right_pressing = false
+		# Con Ctrl: avance por saltos.
 		if _right_dragging:
-			_order_front(_right_press_world, get_global_mouse_position())
+			_order_front(_right_press_world, get_global_mouse_position(), button.ctrl_pressed)
 		else:
-			_order_move(get_global_mouse_position())
+			_order_move(get_global_mouse_position(), button.ctrl_pressed)
 		_right_dragging = false
 		queue_redraw()
 
@@ -96,7 +103,12 @@ func _draw() -> void:
 		_draw_front_preview(_right_press_world, get_global_mouse_position())
 	for marker in _markers:
 		var t: float = marker[1] / MARKER_DURATION
-		draw_arc(marker[0], 6.0 + 14.0 * t, 0.0, TAU, 24, Color(BOX_BORDER, t), 1.5)
+		draw_arc(marker[0], 6.0 + 14.0 * t, 0.0, TAU, 24, Color(marker[2], t), 1.5)
+
+
+## Verde para órdenes normales; naranja si se mantiene Ctrl (avance por saltos).
+func _order_color() -> Color:
+	return BOUND_COLOR if Input.is_key_pressed(KEY_CTRL) else BOX_BORDER
 
 
 ## Línea del frente, flecha hacia donde mirará y un punto por escuadra.
@@ -104,20 +116,21 @@ func _draw_front_preview(from: Vector2, to: Vector2) -> void:
 	_prune_selection()
 	if _selected.is_empty():
 		return
+	var color: Color = _order_color()
 	var facing: Vector2 = _front_facing(from, to)
 	var center: Vector2 = (from + to) / 2.0
-	draw_line(from, to, BOX_BORDER, -1.0)
+	draw_line(from, to, color, -1.0)
 	var tip: Vector2 = center + facing * FACING_ARROW_LENGTH
-	draw_line(center, tip, BOX_BORDER, -1.0)
-	draw_line(tip, tip - facing.rotated(0.5) * 8.0, BOX_BORDER, -1.0)
-	draw_line(tip, tip - facing.rotated(-0.5) * 8.0, BOX_BORDER, -1.0)
+	draw_line(center, tip, color, -1.0)
+	draw_line(tip, tip - facing.rotated(0.5) * 8.0, color, -1.0)
+	draw_line(tip, tip - facing.rotated(-0.5) * 8.0, color, -1.0)
 	for part in _split_front(from, to):
 		var formation: Formation = part[0]
 		var part_from: Vector2 = part[1]
 		var part_to: Vector2 = part[2]
 		var count: int = formation.squad_count()
 		for k in count:
-			draw_circle(part_from.lerp(part_to, (k + 0.5) / count), 3.0, BOX_BORDER)
+			draw_circle(part_from.lerp(part_to, (k + 0.5) / count), 3.0, color)
 
 
 func _drag_rect() -> Rect2:
@@ -168,7 +181,8 @@ func _set_selection(formations: Array[Formation], additive: bool) -> void:
 
 
 ## Orden simple: mueve las formaciones seleccionadas; si hay varias, conservan su posición relativa.
-func _order_move(target: Vector2) -> void:
+## Con bound = true avanzan por saltos.
+func _order_move(target: Vector2, bound: bool) -> void:
 	_prune_selection()
 	if _selected.is_empty():
 		return
@@ -177,12 +191,13 @@ func _order_move(target: Vector2) -> void:
 		center += formation.global_position
 	center /= _selected.size()
 	for formation in _selected:
-		formation.move_to(target + formation.global_position - center)
-	_markers.append([target, MARKER_DURATION])
+		formation.move_to(target + formation.global_position - center, Vector2.ZERO, 0.0, bound)
+	_markers.append([target, MARKER_DURATION, BOUND_COLOR if bound else BOX_BORDER])
 
 
 ## Orden de frente: cada formación seleccionada recibe su parte de la línea dibujada.
-func _order_front(from: Vector2, to: Vector2) -> void:
+## Con bound = true avanzan por saltos.
+func _order_front(from: Vector2, to: Vector2, bound: bool) -> void:
 	_prune_selection()
 	if _selected.is_empty():
 		return
@@ -191,8 +206,8 @@ func _order_front(from: Vector2, to: Vector2) -> void:
 		var formation: Formation = part[0]
 		var part_from: Vector2 = part[1]
 		var part_to: Vector2 = part[2]
-		formation.move_to((part_from + part_to) / 2.0, facing, part_from.distance_to(part_to))
-	_markers.append([(from + to) / 2.0, MARKER_DURATION])
+		formation.move_to((part_from + part_to) / 2.0, facing, part_from.distance_to(part_to), bound)
+	_markers.append([(from + to) / 2.0, MARKER_DURATION, BOUND_COLOR if bound else BOX_BORDER])
 
 
 ## Arrastrar de izquierda a derecha hace mirar "hacia arriba" respecto a la línea.

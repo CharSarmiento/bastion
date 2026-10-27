@@ -19,7 +19,27 @@ movimiento con clic derecho, disparo automático al enemigo en rango.
 Listo cuando: mover y disparar se siente bien.
 
 Orden de trabajo acordado: pasos 1-2 hechos → A. movimiento moderno (hecho) →
-paso 3: enemigos y disparos (hecho) → C. cobertura (hecha) → **D. avance por saltos**.
+paso 3: enemigos y disparos (hecho) → C. cobertura (hecha) → D. avance por saltos (hecho).
+
+Pendiente (ideas del usuario, en este orden; decidir controles con él al llegar):
+1. **"Avanzar"**: la compañía adelanta su posición conservando la colocación de cada soldado.
+2. **Retirada combatiendo**: retroceden sin dejar de disparar hasta salir del alcance enemigo;
+   después se dan la vuelta y corren.
+3. **"Mantener posición"**: desactiva el adelantarse solos para disparar.
+Quizá haga falta una pequeña barra de órdenes en pantalla. Después: cerrar la Fase 1,
+revisar rendimiento (objetivo 200-300 soldados) y empezar la Fase 2.
+
+## Avance por saltos (etapa D) y supresión
+- Ctrl + clic derecho (o Ctrl + arrastrar el frente): `Formation.move_to(..., bound = true)`.
+  `_update_bounding()`: salta una escuadra cada vez, la más retrasada, y termina
+  `bound_length / 2` por delante de la más avanzada (se adelantan unas a otras); corre
+  (`bound_speed_factor`). Las demás cubren quietas. Vista previa y marcador en naranja.
+- Supresión (paso previo a la moral de la Fase 2): cada disparo recibido suma
+  `suppression_per_shot` (la mitad a cubierto); baja `suppression_recovery`/s. Reduce puntería
+  y cadencia. Es lo que hace útil cubrir: con ella, saltar salva ~2 soldados de 12 frente a
+  avanzar todos a la vez, a cambio de tardar ~3 veces más.
+- Alcance: `effective_range` 320 (puntería normal) y `weapon_range` 380 (máximo, puntería
+  × hasta 0,35). Al adelantarse para disparar buscan el alcance eficaz.
 
 ## Cobertura (etapa C)
 - Decoración con cobertura = `CoverObject` (Sprite2D con `cover_type`, grupo "cover"). Tipos en

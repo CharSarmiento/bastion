@@ -20,8 +20,8 @@ const CATCH_UP_FACTOR := 1.6
 const DEPLOY_ATTEMPTS := 40
 ## Cada cuánto (segundos) revisa si algún soldado debe adelantarse para poder disparar.
 const ADVANCE_CHECK_INTERVAL := 0.5
-## Al adelantarse, se queda a esta fracción del alcance del enemigo (algo dentro, no al límite).
-const ADVANCE_RANGE_FACTOR := 0.85
+## Al adelantarse, se queda a esta fracción del alcance eficaz (algo dentro, no al límite).
+const ADVANCE_RANGE_FACTOR := 0.95
 ## Ángulos (grados) alrededor del enemigo que prueba al adelantarse, del más directo al menos.
 const ADVANCE_ANGLE_OFFSETS: Array[float] = [0.0, 12.0, -12.0, 24.0, -24.0, 36.0, -36.0]
 ## Segundos sin que nadie de la compañía combata antes de volver a los puestos.
@@ -92,6 +92,16 @@ func remove_member(soldier: Soldier) -> void:
 		_trail_distances[i] = i * _unit_type.march_spacing + _rng.randf_range(-4.0, 4.0)
 
 
+## true cuando la escuadra ha llegado y todos sus soldados están ya en su puesto.
+func is_settled() -> bool:
+	if _state != State.HOLDING:
+		return false
+	for i in members.size():
+		if _time < _release_times[i] or members[i].distance_to_slot() > 8.0:
+			return false
+	return true
+
+
 func center() -> Vector2:
 	var sum := Vector2.ZERO
 	for soldier in members:
@@ -102,8 +112,9 @@ func center() -> Vector2:
 ## Orden de ir a un tramo del frente. occupied acumula los puntos ya repartidos entre todas las
 ## escuadras de la compañía, para que nadie se ponga encima de otro.
 ## Con instant = true los soldados aparecen directamente en su sitio (al empezar la batalla).
+## speed_factor > 1 hace que la escuadra corra (en los saltos del avance por saltos).
 func order_move(destination: Vector2, facing: Vector2, frontage: float, front_center: Vector2,
-		front_half_width: float, occupied: Array[Vector2], instant: bool) -> void:
+		front_half_width: float, occupied: Array[Vector2], instant: bool, speed_factor: float = 1.0) -> void:
 	_destination = destination
 	# Una orden nueva manda: nadie sigue adelantado por su cuenta.
 	_advance_spots.fill(null)
@@ -116,7 +127,7 @@ func order_move(destination: Vector2, facing: Vector2, frontage: float, front_ce
 		return
 
 	var variation: float = _unit_type.speed_variation * 0.8
-	_speed = _unit_type.move_speed * _rng.randf_range(1.0 - variation, 1.0 + variation)
+	_speed = _unit_type.move_speed * _rng.randf_range(1.0 - variation, 1.0 + variation) * speed_factor
 	# Si ya marchaba, reacciona más rápido y sigue desde donde va.
 	var delay_scale: float = 0.5 if _state == State.MARCHING else 1.0
 	if _state == State.HOLDING:
@@ -209,6 +220,9 @@ func _assign_targets() -> void:
 ## combatir durante un rato, todos vuelven a sus puestos.
 func _update_advance(delta: float) -> void:
 	var company: Formation = get_parent()
+	# Durante el avance por saltos nadie se adelanta por su cuenta: manda el salto.
+	if company.bounding:
+		return
 	if not company.engaged:
 		_disengaged_time += delta
 		if _disengaged_time >= DISENGAGE_DELAY:
@@ -220,12 +234,20 @@ func _update_advance(delta: float) -> void:
 		return
 	_advance_timer = ADVANCE_CHECK_INTERVAL
 	for i in members.size():
-		# El que ya dispara se queda donde está (en su puesto o adelantado).
-		if _time >= _release_times[i] and members[i].current_target() == null:
+		# El que ya dispara con buena puntería se queda donde está (en su puesto o adelantado);
+		# el que no tiene objetivo, o solo lo tiene muy lejos, intenta acercarse.
+		if _time >= _release_times[i] and not _has_good_shot(members[i]):
 			_advance_spots[i] = _advance_position(i)
 			# Se reserva el puesto ya, para que el siguiente compañero lo tenga en cuenta.
 			var spot: Vector2 = _spots[i] if _advance_spots[i] == null else _advance_spots[i]
 			members[i].set_slot(spot, _spot_facings[i])
+
+
+## true si el soldado tiene un objetivo dentro de su alcance eficaz.
+func _has_good_shot(soldier: Soldier) -> bool:
+	var target: Soldier = soldier.current_target()
+	return target != null \
+		and soldier.global_position.distance_to(target.global_position) <= _unit_type.effective_range
 
 
 ## Punto desde el que ya tendría a tiro al enemigo más cercano, o null si para eso tendría que
@@ -233,7 +255,7 @@ func _update_advance(delta: float) -> void:
 ## recto hacia el enemigo y, si ese punto queda pegado a un compañero, otros ángulos.
 func _advance_position(index: int) -> Variant:
 	var spot: Vector2 = _spots[index]
-	var reach: float = _unit_type.weapon_range * ADVANCE_RANGE_FACTOR
+	var reach: float = _unit_type.effective_range * ADVANCE_RANGE_FACTOR
 	var enemy: Soldier = members[index].find_nearest_enemy(spot, reach + _unit_type.advance_leash)
 	if enemy == null or spot.distance_to(enemy.global_position) <= reach:
 		return null

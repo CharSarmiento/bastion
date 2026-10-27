@@ -3,9 +3,17 @@ extends Node2D
 ## Unidad de mando (compañía): el jugador la selecciona y la ordena como un solo bloque.
 ## Por dentro se divide sola en escuadras (Squad) que marchan con cierta independencia
 ## y se despliegan dispersas a lo largo del frente ordenado.
+## También puede avanzar por saltos: una escuadra corre mientras las demás la cubren.
 ## La posición de este nodo es la media de las posiciones de sus soldados.
 
 enum Team { PLAYER, ENEMY }
+
+## Distancia (px) a su tramo final a partir de la cual una escuadra ha terminado de saltar.
+const BOUND_ARRIVED_DISTANCE := 24.0
+## Si quedan menos de estos píxeles hasta su tramo final, el salto va directamente hasta él.
+const BOUND_FINAL_SNAP := 40.0
+## Si una escuadra tarda más que esto (segundos) en terminar un salto, salta la siguiente igualmente.
+const BOUND_TIMEOUT := 20.0
 
 @export var unit_type: UnitType
 @export var team: Team = Team.PLAYER
@@ -16,11 +24,20 @@ var soldiers: Array[Soldier] = []
 var squads: Array[Squad] = []
 ## true si algún soldado de la compañía está disparando a un enemigo (se actualiza cada frame).
 var engaged: bool = false
+## true mientras dura un avance por saltos.
+var bounding: bool = false
 var selected: bool = false:
 	set(value):
 		selected = value
 		for soldier in soldiers:
 			soldier.selected = value
+
+## Avance por saltos: tramo final de cada escuadra (Squad -> Vector2), anchura de cada tramo,
+## escuadra que está saltando ahora y tiempo que lleva saltando.
+var _bound_targets: Dictionary = {}
+var _bound_frontage: float = 0.0
+var _bound_mover: Squad = null
+var _bound_time: float = 0.0
 
 
 func _ready() -> void:
@@ -31,7 +48,9 @@ func _ready() -> void:
 
 ## Orden de mover. facing es hacia dónde mirará al llegar (si es cero, hacia donde avanza)
 ## y width la anchura del frente (si es cero, la anchura por defecto de su ficha).
-func move_to(target: Vector2, new_facing: Vector2 = Vector2.ZERO, width: float = 0.0) -> void:
+## Con bound = true avanza por saltos: una escuadra corre mientras las demás la cubren.
+func move_to(target: Vector2, new_facing: Vector2 = Vector2.ZERO, width: float = 0.0,
+		bound: bool = false) -> void:
 	if new_facing == Vector2.ZERO:
 		var direction: Vector2 = target - global_position
 		new_facing = direction.normalized() if direction.length() > 1.0 else facing
@@ -39,7 +58,16 @@ func move_to(target: Vector2, new_facing: Vector2 = Vector2.ZERO, width: float =
 	if width <= 0.0:
 		width = unit_type.default_front_width
 	width = clampf(width, unit_type.min_front_width, unit_type.max_front_width)
-	_deploy(target, facing, width, false)
+	bounding = false
+	_bound_mover = null
+	if bound and squads.size() > 1:
+		_bound_targets.clear()
+		for assignment in _assign_segments(target, facing, width):
+			_bound_targets[assignment[0]] = assignment[1]
+		_bound_frontage = width / squads.size()
+		bounding = true
+	else:
+		_deploy(target, facing, width, false)
 
 
 ## Número de escuadras (para dibujar la vista previa del frente).
@@ -61,7 +89,7 @@ func has_soldier_in_rect(rect: Rect2) -> bool:
 	return false
 
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	if soldiers.is_empty():
 		return
 	var sum := Vector2.ZERO
@@ -71,6 +99,76 @@ func _physics_process(_delta: float) -> void:
 		if not engaged and soldier.current_target() != null:
 			engaged = true
 	global_position = sum / soldiers.size()
+	if bounding:
+		_update_bounding(delta)
+
+
+## Avance por saltos: cuando la escuadra que salta ha terminado de colocarse, salta la que va
+## más retrasada y termina un poco por delante de la más avanzada (se adelantan unas a otras).
+## Las que no saltan se quedan quietas cubriendo, y al estar paradas apuntan mejor.
+func _update_bounding(delta: float) -> void:
+	_bound_time += delta
+	if is_instance_valid(_bound_mover) and _bound_mover in squads \
+			and not _bound_mover.is_settled() and _bound_time < BOUND_TIMEOUT:
+		return
+	var remaining: Dictionary = {}
+	for squad in squads:
+		if squad in _bound_targets:
+			remaining[squad] = _path_length(squad.center(), _bound_targets[squad])
+	var mover: Squad = null
+	for squad: Squad in remaining:
+		if remaining[squad] > BOUND_ARRIVED_DISTANCE and (mover == null or remaining[squad] > remaining[mover]):
+			mover = squad
+	if mover == null:
+		bounding = false  # todas han llegado
+		_bound_mover = null
+		return
+	var others_min: float = INF
+	for squad: Squad in remaining:
+		if squad != mover:
+			others_min = minf(others_min, remaining[squad])
+	var own: float = remaining[mover]
+	var wanted: float = 0.0 if others_min == INF else maxf(0.0, others_min - unit_type.bound_length * 0.5)
+	var step: float = clampf(own - wanted, minf(unit_type.bound_length * 0.5, own), unit_type.bound_length * 2.0)
+	var final_target: Vector2 = _bound_targets[mover]
+	var point: Vector2 = final_target
+	if step < own - BOUND_FINAL_SNAP:
+		point = _point_along_path(mover.center(), final_target, step)
+	var occupied: Array[Vector2] = []
+	for soldier in soldiers:
+		if not soldier in mover.members:
+			occupied.append(soldier.target_slot())
+	mover.order_move(point, facing, _bound_frontage, point, _bound_frontage / 2.0, occupied, false,
+		unit_type.bound_speed_factor)
+	_bound_mover = mover
+	_bound_time = 0.0
+
+
+func _path_length(from: Vector2, to: Vector2) -> float:
+	var path: PackedVector2Array = _nav_path(from, to)
+	var length: float = 0.0
+	for i in range(1, path.size()):
+		length += path[i - 1].distance_to(path[i])
+	return length
+
+
+## Punto que está a distance píxeles de from siguiendo la ruta hacia to.
+func _point_along_path(from: Vector2, to: Vector2, distance: float) -> Vector2:
+	var path: PackedVector2Array = _nav_path(from, to)
+	var walked: float = 0.0
+	for i in range(1, path.size()):
+		var segment: float = path[i - 1].distance_to(path[i])
+		if segment > 0.0 and walked + segment >= distance:
+			return path[i - 1].lerp(path[i], (distance - walked) / segment)
+		walked += segment
+	return to
+
+
+func _nav_path(from: Vector2, to: Vector2) -> PackedVector2Array:
+	var map: RID = get_world_2d().navigation_map
+	if NavigationServer2D.map_get_iteration_id(map) == 0:
+		return PackedVector2Array([from, to])
+	return NavigationServer2D.map_get_path(map, from, to, true)
 
 
 func _spawn() -> void:
@@ -110,15 +208,24 @@ func _on_soldier_died(soldier: Soldier) -> void:
 		queue_free.call_deferred()
 
 
+func _deploy(center: Vector2, direction: Vector2, width: float, instant: bool) -> void:
+	var segment: float = width / squads.size()
+	var occupied: Array[Vector2] = []
+	for assignment in _assign_segments(center, direction, width):
+		var squad: Squad = assignment[0]
+		squad.order_move(assignment[1], direction, segment, center, width / 2.0, occupied, instant)
+
+
 ## Divide el frente en un tramo por escuadra y se los reparte sin que se crucen:
 ## la escuadra que está más a la izquierda (mirando al frente) va al tramo de la izquierda.
-func _deploy(center: Vector2, direction: Vector2, width: float, instant: bool) -> void:
+## Devuelve una lista de [escuadra, centro de su tramo].
+func _assign_segments(center: Vector2, direction: Vector2, width: float) -> Array[Array]:
 	var right := Vector2(-direction.y, direction.x)
 	var ordered: Array[Squad] = squads.duplicate()
 	ordered.sort_custom(func(a: Squad, b: Squad) -> bool:
 		return a.center().dot(right) < b.center().dot(right))
 	var segment: float = width / ordered.size()
-	var occupied: Array[Vector2] = []
+	var result: Array[Array] = []
 	for k in ordered.size():
-		var segment_center: Vector2 = center + right * ((k - (ordered.size() - 1) / 2.0) * segment)
-		ordered[k].order_move(segment_center, direction, segment, center, width / 2.0, occupied, instant)
+		result.append([ordered[k], center + right * ((k - (ordered.size() - 1) / 2.0) * segment)])
+	return result

@@ -55,6 +55,9 @@ var unit_type: UnitType
 ## Bando (Formation.Team). Lo asigna su compañía antes de añadirlo a la escena.
 var team: int = Formation.Team.PLAYER
 var health: float = 100.0
+## Presión del fuego enemigo (0-1): con ella apunta peor y dispara más despacio.
+## Sube con cada disparo recibido y baja sola con el tiempo.
+var suppression: float = 0.0
 ## Velocidad máxima; la escuadra la ajusta para que pueda alcanzar su puesto.
 var max_speed: float = 100.0
 var selected: bool = false:
@@ -169,6 +172,16 @@ func find_nearest_enemy(point: Vector2, max_distance: float) -> Soldier:
 	return best
 
 
+## Le acaban de disparar desde shooter (acierte o no): sube su presión; a cubierto, la mitad.
+func receive_fire(shooter: Vector2) -> void:
+	if _dead or unit_type == null:
+		return
+	var gain: float = unit_type.suppression_per_shot
+	if cover_protection_from(shooter) > 0.0:
+		gain *= 0.5
+	suppression = minf(1.0, suppression + gain)
+
+
 func take_damage(amount: float) -> void:
 	if _dead:
 		return
@@ -221,6 +234,7 @@ func _physics_process(delta: float) -> void:
 func _update_combat(delta: float, walking: bool) -> void:
 	if unit_type == null:
 		return
+	suppression = maxf(0.0, suppression - unit_type.suppression_recovery * delta)
 	_target_timer -= delta
 	if _target_timer <= 0.0:
 		_target_timer = TARGET_CHECK_INTERVAL
@@ -239,6 +253,7 @@ func _update_combat(delta: float, walking: bool) -> void:
 	_fire_cooldown = randf_range(unit_type.fire_interval_min, unit_type.fire_interval_max)
 	if walking:
 		_fire_cooldown *= unit_type.moving_fire_interval_factor
+	_fire_cooldown *= 1.0 + suppression * unit_type.suppression_fire_delay
 
 
 ## Para el indicador: ¿está a cubierto frente a su objetivo o, si no tiene, frente a donde vigila?
@@ -270,11 +285,18 @@ func _has_target() -> bool:
 
 func _fire_at(target: Soldier, walking: bool) -> void:
 	var distance: float = global_position.distance_to(target.global_position)
-	var hit_chance: float = unit_type.accuracy * clampf(1.0 - 0.6 * distance / unit_type.weapon_range, 0.2, 1.0)
+	var effective: float = unit_type.effective_range
+	var hit_chance: float = unit_type.accuracy * clampf(1.0 - 0.6 * minf(distance, effective) / effective, 0.2, 1.0)
+	if distance > effective:
+		# Más allá del alcance eficaz la puntería se desploma.
+		var t: float = (distance - effective) / maxf(unit_type.weapon_range - effective, 1.0)
+		hit_chance *= lerpf(1.0, unit_type.long_range_accuracy_factor, clampf(t, 0.0, 1.0))
 	if walking:
 		hit_chance *= unit_type.moving_accuracy_factor
+	hit_chance *= 1.0 - suppression * unit_type.suppression_accuracy_penalty
 	hit_chance *= 1.0 - target.cover_protection_from(global_position)
 	var hit: bool = randf() < hit_chance
+	target.receive_fire(global_position)
 	var impact: Vector2 = target.global_position
 	if not hit:
 		impact += Vector2.from_angle(randf() * TAU) * randf_range(10.0, 28.0)

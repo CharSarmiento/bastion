@@ -16,8 +16,12 @@ extends Resource
 @export_group("Combate")
 ## Vida de cada soldado.
 @export var soldier_health: float = 100.0
-## Alcance del arma, en píxeles (una casilla = 64).
-@export var weapon_range: float = 320.0
+## Alcance máximo del arma, en píxeles (una casilla = 64).
+@export var weapon_range: float = 380.0
+## Alcance eficaz: hasta aquí la puntería baja poco a poco con la distancia; más allá, hasta el
+## alcance máximo, cae mucho más (se multiplica hasta long_range_accuracy_factor).
+@export var effective_range: float = 320.0
+@export_range(0.0, 1.0) var long_range_accuracy_factor: float = 0.35
 ## Daño de cada impacto.
 @export var damage: float = 35.0
 ## Probabilidad de acertar a quemarropa (0-1); baja con la distancia.
@@ -42,6 +46,23 @@ extends Resource
 @export var squad_delay_max: float = 0.5
 ## Retraso máximo (segundos) con el que reacciona cada soldado, sumado al de su escuadra.
 @export var reaction_delay_max: float = 0.6
+
+@export_group("Supresión")
+## Presión (0-1) que suma cada disparo recibido, acierte o no. A cubierto, la mitad.
+@export_range(0.0, 1.0) var suppression_per_shot: float = 0.12
+## Presión que se recupera por segundo.
+@export var suppression_recovery: float = 0.2
+## Con presión máxima, la puntería se multiplica por (1 - este valor)...
+@export_range(0.0, 1.0) var suppression_accuracy_penalty: float = 0.7
+## ...y el tiempo entre disparos por (1 + este valor).
+@export var suppression_fire_delay: float = 1.0
+
+@export_group("Avance por saltos")
+## Longitud de referencia de los saltos, en píxeles: la escuadra que salta termina la mitad de
+## esta distancia por delante de la escuadra más avanzada.
+@export var bound_length: float = 140.0
+## Las escuadras corren al saltar: su velocidad se multiplica por este factor.
+@export var bound_speed_factor: float = 1.3
 
 @export_group("Despliegue")
 ## Distancia mínima entre soldados al desplegarse, en píxeles.
