@@ -1,0 +1,29 @@
+# Proyecto: Bastión — RTS táctico de campaña (Godot 4, 2D top-down)
+
+## Reglas
+- Lee docs/diseno.md antes de proponer cambios grandes.
+- Motor: Godot 4.7 estándar, lenguaje GDScript con tipado estático.
+- Datos de contenido en Resources (.tres) dentro de data/, nunca hardcodeados.
+- Assets en assets/; no renombrar ni mover archivos de assets sin preguntar.
+- Comentarios y nombres de UI en español; nombres de código en inglés.
+- Tras cada cambio, explica cómo probarlo en el editor.
+- El usuario no es programador experto: explica en español y de forma sencilla.
+- Git: el usuario hace los commits y los pushes. Claude nunca ejecuta `git commit` ni `git push`;
+  cuando algo funcione, recomienda un mensaje de commit.
+- Repositorio público en GitHub (https://github.com/CharSarmiento/bastion). assets/ y _fuentes/
+  están excluidos en .gitignore por la licencia de CraftPix: nunca deben subirse.
+
+## Fase actual: 1 · Prototipo de batalla
+Mapa de prueba, una compañía propia y dos enemigas quietas. Selección (clic o recuadro),
+movimiento en formación en línea con clic derecho, disparo automático al enemigo en rango.
+Listo cuando: mover y disparar se siente bien.
+
+## Assets (pack CraftPix, pixel art)
+- Casilla de terreno 64×64 (assets/terrain/tiles/tiles.png: agua, césped, arena, tierra, asfalto).
+  Filtro de textura: Nearest (pixel art).
+- PNG sueltos, un archivo por fotograma (`walk_01.png`, `walk_02.png`…); no hay sprite sheets.
+- Todos los sprites miran hacia arriba (norte); la rotación se hace por código.
+- Soldados por capas: piernas (walk, 7 fr, 96×96) + torso/arma (64×64). Lienzos de distinto tamaño.
+- Vehículos: casco + torreta separados (128×128).
+- Solo existe el bando verde; el enemigo se distingue tiñendo con shader.
+- Fuentes de Photoshop, portadas y licencia en _fuentes/ (ignorada por Godot).

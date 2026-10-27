@@ -1,0 +1,7 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+
+# Assets del pack CraftPix: licencia no permite redistribuirlos (repo público)
+/assets/
+/_fuentes/
