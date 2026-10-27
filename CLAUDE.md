@@ -34,12 +34,18 @@ revisar rendimiento (objetivo 200-300 soldados) y empezar la Fase 2.
   `_update_bounding()`: salta una escuadra cada vez, la más retrasada, y termina
   `bound_length / 2` por delante de la más avanzada (se adelantan unas a otras); corre
   (`bound_speed_factor`). Las demás cubren quietas. Vista previa y marcador en naranja.
+  El progreso se mide desde el punto ordenado en cada salto (`_bound_positions`), nunca desde el
+  centro real de la escuadra: al buscar cobertura el centro se desvía y el avance no terminaba
+  nunca (bug con muchos árboles: saltaban una y otra vez).
 - Supresión (paso previo a la moral de la Fase 2): cada disparo recibido suma
   `suppression_per_shot` (la mitad a cubierto); baja `suppression_recovery`/s. Reduce puntería
   y cadencia. Es lo que hace útil cubrir: con ella, saltar salva ~2 soldados de 12 frente a
   avanzar todos a la vez, a cambio de tardar ~3 veces más.
 - Alcance: `effective_range` 320 (puntería normal) y `weapon_range` 380 (máximo, puntería
   × hasta 0,35). Al adelantarse para disparar buscan el alcance eficaz.
+- Contra la inquietud (el usuario notó que se movían "sin motivo"): solo se adelanta quien NO
+  tiene a nadie a tiro (no para mejorar un tiro largo), cada soldado se recoloca como mucho cada
+  8 s (`ADVANCE_MIN_INTERVAL`) y nunca a menos del 80% del alcance eficaz de un enemigo.
 
 ## Cobertura (etapa C)
 - Decoración con cobertura = `CoverObject` (Sprite2D con `cover_type`, grupo "cover"). Tipos en
@@ -54,7 +60,7 @@ revisar rendimiento (objetivo 200-300 soldados) y empezar la Fase 2.
   al desplegarse no se adelantan más de 20 px de la línea ordenada si ese punto queda a tiro de
   algún enemigo (sin enemigos cerca, sí pueden ocupar cobertura adelantada, p. ej. sacos
   terreros). Al adelantarse para disparar, prefieren la cobertura más alejada que siga a tiro y
-  nunca quedan a menos del 60% del alcance de ningún enemigo.
+  nunca quedan a menos del 80% del alcance eficaz de ningún enemigo.
 - Indicador: círculo de selección azul claro = a cubierto. Las copas de los árboles se vuelven
   semitransparentes con soldados debajo.
 - Aún no hay línea de visión: rocas y árboles no cortan disparos (llegará con la niebla de guerra).

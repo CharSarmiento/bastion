@@ -26,13 +26,16 @@ const ADVANCE_RANGE_FACTOR := 0.95
 const ADVANCE_ANGLE_OFFSETS: Array[float] = [0.0, 12.0, -12.0, 24.0, -24.0, 36.0, -36.0]
 ## Segundos sin que nadie de la compañía combata antes de volver a los puestos.
 const DISENGAGE_DELAY := 2.0
+## Un soldado que se ha recolocado por su cuenta no vuelve a hacerlo hasta pasados estos segundos
+## (así no se pasan el combate yendo y viniendo).
+const ADVANCE_MIN_INTERVAL := 8.0
 ## Al desplegarse, lo máximo (px) que se adelantan de la línea ordenada para buscar una
 ## cobertura que quede al alcance de algún enemigo: no se meten por delante de la línea del
 ## jugador si eso les pone a tiro. Sin enemigos cerca, sí pueden ocupar una cobertura adelantada.
 const COVER_MAX_FORWARD := 20.0
 ## Al adelantarse para disparar, nunca se acercan a ningún enemigo a menos de esta fracción
-## del alcance: no se arriesgan más de lo necesario por una cobertura.
-const ADVANCE_MIN_RANGE_FACTOR := 0.6
+## del alcance eficaz: no se arriesgan más de lo necesario por una cobertura.
+const ADVANCE_MIN_RANGE_FACTOR := 0.8
 
 var members: Array[Soldier] = []
 
@@ -60,6 +63,8 @@ var _spot_facings: PackedVector2Array = PackedVector2Array()
 var _advance_spots: Array = []
 var _advance_timer: float = 0.0
 var _disengaged_time: float = 0.0
+## Por soldado: momento (en _time) de su última recolocación por su cuenta.
+var _last_relocation: PackedFloat64Array = PackedFloat64Array()
 
 
 func setup(unit_type: UnitType, squad_members: Array[Soldier]) -> void:
@@ -70,6 +75,8 @@ func setup(unit_type: UnitType, squad_members: Array[Soldier]) -> void:
 	_release_times.resize(members.size())
 	_trail_distances.resize(members.size())
 	_advance_spots.resize(members.size())
+	_last_relocation.resize(members.size())
+	_last_relocation.fill(-ADVANCE_MIN_INTERVAL)
 	for i in members.size():
 		_trail_distances[i] = i * _unit_type.march_spacing + _rng.randf_range(-4.0, 4.0)
 		members[i].max_speed = _unit_type.move_speed * CATCH_UP_FACTOR \
@@ -85,6 +92,7 @@ func remove_member(soldier: Soldier) -> void:
 	_release_times.remove_at(index)
 	_trail_distances.remove_at(index)
 	_advance_spots.remove_at(index)
+	_last_relocation.remove_at(index)
 	if index < _spots.size():
 		_spots.remove_at(index)
 		_spot_facings.remove_at(index)
@@ -234,20 +242,18 @@ func _update_advance(delta: float) -> void:
 		return
 	_advance_timer = ADVANCE_CHECK_INTERVAL
 	for i in members.size():
-		# El que ya dispara con buena puntería se queda donde está (en su puesto o adelantado);
-		# el que no tiene objetivo, o solo lo tiene muy lejos, intenta acercarse.
-		if _time >= _release_times[i] and not _has_good_shot(members[i]):
-			_advance_spots[i] = _advance_position(i)
-			# Se reserva el puesto ya, para que el siguiente compañero lo tenga en cuenta.
-			var spot: Vector2 = _spots[i] if _advance_spots[i] == null else _advance_spots[i]
-			members[i].set_slot(spot, _spot_facings[i])
-
-
-## true si el soldado tiene un objetivo dentro de su alcance eficaz.
-func _has_good_shot(soldier: Soldier) -> bool:
-	var target: Soldier = soldier.current_target()
-	return target != null \
-		and soldier.global_position.distance_to(target.global_position) <= _unit_type.effective_range
+		# Solo intenta acercarse quien no tiene a nadie a tiro; el que ya dispara (aunque sea de
+		# lejos) se queda donde está. Y nadie se recoloca más de una vez cada ADVANCE_MIN_INTERVAL.
+		if _time < _release_times[i] or members[i].current_target() != null \
+				or _time < _last_relocation[i] + ADVANCE_MIN_INTERVAL:
+			continue
+		var previous: Variant = _advance_spots[i]
+		_advance_spots[i] = _advance_position(i)
+		if _advance_spots[i] != previous:
+			_last_relocation[i] = _time
+		# Se reserva el puesto ya, para que el siguiente compañero lo tenga en cuenta.
+		var spot: Vector2 = _spots[i] if _advance_spots[i] == null else _advance_spots[i]
+		members[i].set_slot(spot, _spot_facings[i])
 
 
 ## Punto desde el que ya tendría a tiro al enemigo más cercano, o null si para eso tendría que
@@ -274,7 +280,7 @@ func _advance_position(index: int) -> Variant:
 				continue
 			point = walkable
 		var too_close: Soldier = members[index].find_nearest_enemy(
-			point, _unit_type.weapon_range * ADVANCE_MIN_RANGE_FACTOR)
+			point, _unit_type.effective_range * ADVANCE_MIN_RANGE_FACTOR)
 		if too_close == null and _is_spot_free(point, members[index]):
 			return point
 	return null
@@ -286,7 +292,7 @@ func _advance_position(index: int) -> Variant:
 func _advance_cover_point(index: int, spot: Vector2, enemy_position: Vector2, reach: float) -> Variant:
 	var best: Variant = null
 	var best_score: float = -INF
-	var min_enemy_distance: float = _unit_type.weapon_range * ADVANCE_MIN_RANGE_FACTOR
+	var min_enemy_distance: float = _unit_type.effective_range * ADVANCE_MIN_RANGE_FACTOR
 	for node in get_tree().get_nodes_in_group("cover"):
 		var cover: CoverObject = node
 		if cover.global_position.distance_to(spot) > _unit_type.advance_leash + 40.0:

@@ -32,9 +32,14 @@ var selected: bool = false:
 		for soldier in soldiers:
 			soldier.selected = value
 
-## Avance por saltos: tramo final de cada escuadra (Squad -> Vector2), anchura de cada tramo,
-## escuadra que está saltando ahora y tiempo que lleva saltando.
+## Avance por saltos: tramo final de cada escuadra (Squad -> Vector2), punto al que se le mandó
+## en su último salto (Squad -> Vector2), anchura de cada tramo, escuadra que está saltando ahora
+## y tiempo que lleva saltando.
+## El progreso se mide desde el punto ordenado y no desde el centro real de la escuadra: al
+## desplegarse buscan cobertura y su centro puede quedar lejos del punto, y entonces parecería
+## que no han llegado nunca (saltaban una y otra vez sin terminar).
 var _bound_targets: Dictionary = {}
+var _bound_positions: Dictionary = {}
 var _bound_frontage: float = 0.0
 var _bound_mover: Squad = null
 var _bound_time: float = 0.0
@@ -62,8 +67,10 @@ func move_to(target: Vector2, new_facing: Vector2 = Vector2.ZERO, width: float =
 	_bound_mover = null
 	if bound and squads.size() > 1:
 		_bound_targets.clear()
+		_bound_positions.clear()
 		for assignment in _assign_segments(target, facing, width):
 			_bound_targets[assignment[0]] = assignment[1]
+			_bound_positions[assignment[0]] = assignment[0].center()
 		_bound_frontage = width / squads.size()
 		bounding = true
 	else:
@@ -114,7 +121,7 @@ func _update_bounding(delta: float) -> void:
 	var remaining: Dictionary = {}
 	for squad in squads:
 		if squad in _bound_targets:
-			remaining[squad] = _path_length(squad.center(), _bound_targets[squad])
+			remaining[squad] = _path_length(_bound_positions[squad], _bound_targets[squad])
 	var mover: Squad = null
 	for squad: Squad in remaining:
 		if remaining[squad] > BOUND_ARRIVED_DISTANCE and (mover == null or remaining[squad] > remaining[mover]):
@@ -133,7 +140,8 @@ func _update_bounding(delta: float) -> void:
 	var final_target: Vector2 = _bound_targets[mover]
 	var point: Vector2 = final_target
 	if step < own - BOUND_FINAL_SNAP:
-		point = _point_along_path(mover.center(), final_target, step)
+		point = _point_along_path(_bound_positions[mover], final_target, step)
+	_bound_positions[mover] = point
 	var occupied: Array[Vector2] = []
 	for soldier in soldiers:
 		if not soldier in mover.members:
