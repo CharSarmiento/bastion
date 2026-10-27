@@ -245,6 +245,10 @@ y_sort_enabled = true
 position = Vector2(1280, 1216)
 unit_type = ExtResource("11_4qehw")
 
+[node name="PlayerCompany2" parent="Units" unique_id=1587305926 instance=ExtResource("10_qa7bh")]
+position = Vector2(930, 1216)
+unit_type = ExtResource("11_4qehw")
+
 [node name="EnemyCompanyWest" parent="Units" unique_id=1952919793 instance=ExtResource("10_qa7bh")]
 position = Vector2(416, 448)
 unit_type = ExtResource("11_4qehw")

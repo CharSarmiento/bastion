@@ -123,6 +123,14 @@ func is_settled() -> bool:
 	return true
 
 
+## Puestos que ocupan o van a ocupar sus soldados (para que otras compañías no los escojan).
+func planned_spots() -> Array[Vector2]:
+	var result: Array[Vector2] = []
+	for i in _spots.size():
+		result.append(_spots[i] if i >= _advance_spots.size() or _advance_spots[i] == null else _advance_spots[i])
+	return result
+
+
 func center() -> Vector2:
 	var sum := Vector2.ZERO
 	for soldier in members:
@@ -437,11 +445,13 @@ func _advance_cover_point(index: int, spot: Vector2, enemy_position: Vector2, re
 	return best
 
 
-## true si ningún otro soldado de la compañía va a quedar demasiado cerca de point.
+## true si ningún otro soldado del bando (de esta compañía o de otra) va a quedar demasiado
+## cerca de point.
 func _is_spot_free(point: Vector2, who: Soldier) -> bool:
-	var company: Formation = get_parent()
-	for other in company.soldiers:
-		if other != who and other.target_slot().distance_to(point) < _unit_type.deploy_spacing_min:
+	for node in get_tree().get_nodes_in_group("soldiers"):
+		var other: Soldier = node
+		if other != who and other.team == who.team \
+				and other.target_slot().distance_to(point) < _unit_type.deploy_spacing_min:
 			return false
 	return true
 

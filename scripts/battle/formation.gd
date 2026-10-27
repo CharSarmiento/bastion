@@ -97,7 +97,7 @@ func retreat_to(target: Vector2, new_facing: Vector2 = Vector2.ZERO, width: floa
 func advance_by(offset: Vector2) -> void:
 	bounding = false
 	_bound_mover = null
-	var occupied: Array[Vector2] = []
+	var occupied: Array[Vector2] = _friendly_spots()
 	for squad in squads:
 		squad.order_shift(offset, occupied)
 
@@ -167,7 +167,7 @@ func _update_bounding(delta: float) -> void:
 	if step < own - BOUND_FINAL_SNAP:
 		point = _point_along_path(_bound_positions[mover], final_target, step)
 	_bound_positions[mover] = point
-	var occupied: Array[Vector2] = []
+	var occupied: Array[Vector2] = _friendly_spots()
 	for soldier in soldiers:
 		if not soldier in mover.members:
 			occupied.append(soldier.target_slot())
@@ -243,10 +243,22 @@ func _on_soldier_died(soldier: Soldier) -> void:
 
 func _deploy(center: Vector2, direction: Vector2, width: float, instant: bool) -> void:
 	var segment: float = width / squads.size()
-	var occupied: Array[Vector2] = []
+	var occupied: Array[Vector2] = _friendly_spots()
 	for assignment in _assign_segments(center, direction, width):
 		var squad: Squad = assignment[0]
 		squad.order_move(assignment[1], direction, segment, center, width / 2.0, occupied, instant)
+
+
+## Puestos de las demás compañías del mismo bando (los que ocupan o a los que se dirigen),
+## para que al desplegarse nadie escoja un sitio ya tomado por otra compañía.
+func _friendly_spots() -> Array[Vector2]:
+	var result: Array[Vector2] = []
+	for node in get_tree().get_nodes_in_group("formations"):
+		var other: Formation = node
+		if other != self and other.team == team:
+			for squad in other.squads:
+				result.append_array(squad.planned_spots())
+	return result
 
 
 ## Divide el frente en un tramo por escuadra y se los reparte sin que se crucen:

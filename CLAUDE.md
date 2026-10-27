@@ -14,7 +14,8 @@
   están excluidos en .gitignore por la licencia de CraftPix: nunca deben subirse.
 
 ## Fase actual: 1 · Prototipo de batalla
-Mapa de prueba, una compañía propia y dos enemigas quietas. Selección (clic o recuadro),
+Mapa de prueba, dos compañías propias (PlayerCompany y PlayerCompany2, para probar el mando
+de varias a la vez) y dos enemigas quietas. Selección (clic o recuadro),
 movimiento con clic derecho, disparo automático al enemigo en rango.
 Listo cuando: mover y disparar se siente bien.
 
@@ -29,6 +30,10 @@ Cada orden nueva lleva botón en la barra de órdenes y un atajo de teclado (dec
 Después: cerrar la Fase 1, revisar rendimiento (objetivo 200-300 soldados) y empezar la Fase 2.
 
 ## Órdenes y barra de órdenes
+- Varias compañías: recuadro o Mayús + clic izquierdo. Clic simple y "Avanzar" conservan su
+  posición relativa; el frente arrastrado se reparte entre ellas. Al elegir puestos, cada
+  compañía evita los de las demás del mismo bando (`Formation._friendly_spots()`,
+  `Squad.planned_spots()`; `Squad._is_spot_free()` mira a todo el bando).
 - `SelectionManager.Order` {MOVE, BOUND, ADVANCE, RETREAT}. Atajos: clic derecho = mover,
   Ctrl = saltos, Alt = avanzar, Mayús = retirada (Mayús solo selecciona con el botón izquierdo). La barra (`OrderBar`, CanvasLayer creado por código en
   `battle.gd`, abajo en el centro, solo con selección) prepara la orden del siguiente clic
