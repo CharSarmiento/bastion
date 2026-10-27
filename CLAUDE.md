@@ -22,12 +22,24 @@ Orden de trabajo acordado: pasos 1-2 hechos → A. movimiento moderno (hecho) �
 paso 3: enemigos y disparos (hecho) → C. cobertura (hecha) → D. avance por saltos (hecho).
 
 Pendiente (ideas del usuario, en este orden; decidir controles con él al llegar):
-1. **"Avanzar"**: la compañía adelanta su posición conservando la colocación de cada soldado.
+1. **"Avanzar"** (hecho, ver "Órdenes").
 2. **Retirada combatiendo**: retroceden sin dejar de disparar hasta salir del alcance enemigo;
    después se dan la vuelta y corren.
 3. **"Mantener posición"**: desactiva el adelantarse solos para disparar.
-Quizá haga falta una pequeña barra de órdenes en pantalla. Después: cerrar la Fase 1,
-revisar rendimiento (objetivo 200-300 soldados) y empezar la Fase 2.
+Cada orden nueva lleva botón en la barra de órdenes y un atajo de teclado (decisión del usuario).
+Después: cerrar la Fase 1, revisar rendimiento (objetivo 200-300 soldados) y empezar la Fase 2.
+
+## Órdenes y barra de órdenes
+- `SelectionManager.Order` {MOVE, BOUND, ADVANCE}. Atajos: clic derecho = mover,
+  Ctrl = saltos, Alt = avanzar. La barra (`OrderBar`, CanvasLayer creado por código en
+  `battle.gd`, abajo en el centro, solo con selección) prepara la orden del siguiente clic
+  derecho (`armed_order`); tras usarse vuelve a Mover; Esc la cancela.
+- "Avanzar" (Alt + clic derecho, sin arrastre; vista previa: un punto azul por soldado):
+  `Formation.advance_by(offset)` → `Squad.order_shift()`. El centro de la selección va al clic y
+  cada soldado conserva su colocación: camina directo (sin fila) a su sitio desplazado, a paso
+  normal (`Soldier.speed_factor`), y ahí toma cobertura a ≤ 40 px si la hay (misma prudencia de
+  no adelantarse a tiro). Si cae en agua u obstáculo, el sitio válido más cercano. Mientras
+  avanzan no se adelantan solos para disparar. Mantienen hacia dónde miraban.
 
 ## Avance por saltos (etapa D) y supresión
 - Ctrl + clic derecho (o Ctrl + arrastrar el frente): `Formation.move_to(..., bound = true)`.

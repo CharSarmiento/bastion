@@ -77,6 +77,16 @@ func move_to(target: Vector2, new_facing: Vector2 = Vector2.ZERO, width: float =
 		_deploy(target, facing, width, false)
 
 
+## Orden "Avanzar": toda la compañía se desplaza offset píxeles conservando la colocación de cada
+## soldado (no se reparte un frente nuevo). Sigue mirando hacia donde miraba.
+func advance_by(offset: Vector2) -> void:
+	bounding = false
+	_bound_mover = null
+	var occupied: Array[Vector2] = []
+	for squad in squads:
+		squad.order_shift(offset, occupied)
+
+
 ## Número de escuadras (para dibujar la vista previa del frente).
 func squad_count() -> int:
 	return squads.size()

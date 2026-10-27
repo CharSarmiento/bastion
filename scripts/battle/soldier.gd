@@ -60,6 +60,8 @@ var health: float = 100.0
 var suppression: float = 0.0
 ## Velocidad máxima; la escuadra la ajusta para que pueda alcanzar su puesto.
 var max_speed: float = 100.0
+## Multiplica la velocidad máxima (la escuadra lo baja para que caminen a paso de marcha).
+var speed_factor: float = 1.0
 var selected: bool = false:
 	set(value):
 		selected = value
@@ -210,7 +212,7 @@ func _physics_process(delta: float) -> void:
 	var walking: bool = distance > ARRIVE_DISTANCE
 	if walking:
 		# Frena al acercarse al puesto para no pasarse ni temblar.
-		var speed: float = minf(max_speed, slot_distance * 6.0)
+		var speed: float = minf(max_speed * speed_factor, slot_distance * 6.0)
 		global_position += to_goal / distance * minf(speed * delta, distance)
 		_turn_toward(to_goal if slot_distance > FACE_MOVEMENT_DISTANCE else _slot_facing, TURN_SPEED, delta)
 		_legs.play("walk")

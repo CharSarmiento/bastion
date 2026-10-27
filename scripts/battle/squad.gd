@@ -36,6 +36,12 @@ const COVER_MAX_FORWARD := 20.0
 ## Al adelantarse para disparar, nunca se acercan a ningún enemigo a menos de esta fracción
 ## del alcance eficaz: no se arriesgan más de lo necesario por una cobertura.
 const ADVANCE_MIN_RANGE_FACTOR := 0.8
+## Orden "Avanzar": cada soldado busca cobertura como mucho a esta distancia (px) de su nuevo
+## sitio; si no hay, se queda en él (o lo más cerca posible, si cae en el agua o en un obstáculo).
+const SHIFT_COVER_RADIUS := 40.0
+const SHIFT_SEARCH_RADIUS := 60.0
+## Si alguien no llega en este tiempo (segundos), la orden "Avanzar" se da por terminada.
+const SHIFT_TIMEOUT := 60.0
 
 var members: Array[Soldier] = []
 
@@ -65,6 +71,8 @@ var _advance_timer: float = 0.0
 var _disengaged_time: float = 0.0
 ## Por soldado: momento (en _time) de su última recolocación por su cuenta.
 var _last_relocation: PackedFloat64Array = PackedFloat64Array()
+## true mientras cumple una orden "Avanzar" (cada soldado camina directo a su nuevo sitio).
+var _shifting: bool = false
 
 
 func setup(unit_type: UnitType, squad_members: Array[Soldier]) -> void:
@@ -127,6 +135,7 @@ func order_move(destination: Vector2, facing: Vector2, frontage: float, front_ce
 	# Una orden nueva manda: nadie sigue adelantado por su cuenta.
 	_advance_spots.fill(null)
 	_disengaged_time = 0.0
+	_end_shift()
 	_plan_deployment(destination, facing, frontage, front_center, front_half_width, occupied)
 	if instant:
 		for i in members.size():
@@ -149,6 +158,28 @@ func order_move(destination: Vector2, facing: Vector2, frontage: float, front_ce
 	_path_pending = true
 
 
+## Orden "Avanzar": la escuadra se desplaza offset píxeles conservando la colocación de cada
+## soldado. No marchan en fila: cada uno camina directo a su nuevo sitio (rodeando el agua) a
+## paso normal, y al llegar busca una cobertura pegada a él.
+func order_shift(offset: Vector2, occupied: Array[Vector2]) -> void:
+	_advance_spots.fill(null)
+	_disengaged_time = 0.0
+	_state = State.HOLDING
+	_path_pending = false
+	_path.clear()
+	_spots = PackedVector2Array()
+	for i in members.size():
+		var spot: Vector2 = _shift_spot(members[i].global_position + offset, _spot_facings[i], occupied)
+		occupied.append(spot)
+		_spots.append(spot)
+	_start_time = _time + _rng.randf() * _unit_type.squad_delay_max
+	for i in members.size():
+		var reaction: float = 0.0 if i == 0 else _rng.randf_range(0.1, _unit_type.reaction_delay_max)
+		_release_times[i] = _start_time + reaction
+		members[i].speed_factor = 1.0 / CATCH_UP_FACTOR
+	_shifting = true
+
+
 func _physics_process(delta: float) -> void:
 	if members.is_empty():
 		return
@@ -158,9 +189,55 @@ func _physics_process(delta: float) -> void:
 			_request_path()
 		if not _path_pending and _time >= _start_time:
 			_advance_anchor(delta)
+	elif _shifting:
+		# Mientras avanzan, nadie se adelanta por su cuenta: manda la orden.
+		if is_settled() or _time > _start_time + SHIFT_TIMEOUT:
+			_end_shift()
 	else:
 		_update_advance(delta)
 	_assign_targets()
+
+
+func _end_shift() -> void:
+	_shifting = false
+	for soldier in members:
+		soldier.speed_factor = 1.0
+
+
+## Sitio final de un soldado al avanzar: la mejor cobertura cercana a point (sin meterse por
+## delante a tiro del enemigo); si no hay, point o el punto válido más cercano.
+func _shift_spot(point: Vector2, facing: Vector2, occupied: Array[Vector2]) -> Vector2:
+	var spacing: float = _unit_type.deploy_spacing_min
+	var best: Variant = null
+	var best_score: float = -INF
+	for node in get_tree().get_nodes_in_group("cover"):
+		var cover: CoverObject = node
+		if cover.global_position.distance_to(point) > SHIFT_COVER_RADIUS + 40.0:
+			continue
+		for candidate in cover.cover_points(facing):
+			var distance: float = candidate.distance_to(point)
+			if distance > SHIFT_COVER_RADIUS:
+				continue
+			if (candidate - point).dot(facing) > COVER_MAX_FORWARD and _in_enemy_range(candidate):
+				continue
+			var score: float = cover.cover_type.protection - distance / 100.0
+			if score > best_score and _is_valid_stand_point(candidate) \
+					and _far_from_all(candidate, occupied, spacing):
+				best = candidate
+				best_score = score
+	if best != null:
+		return best
+	if _is_valid_stand_point(point) and _far_from_all(point, occupied, spacing):
+		return point
+	# El sitio cae en el agua, en un obstáculo o encima de un compañero: busca el más cercano.
+	for attempt in DEPLOY_ATTEMPTS:
+		var radius: float = SHIFT_SEARCH_RADIUS * (attempt + 1) / DEPLOY_ATTEMPTS
+		var candidate: Vector2 = point + Vector2.from_angle(_rng.randf() * TAU) * radius
+		if _map_ready():
+			candidate = NavigationServer2D.map_get_closest_point(_map(), candidate)
+		if _is_valid_stand_point(candidate) and _far_from_all(candidate, occupied, spacing * 0.8):
+			return candidate
+	return NavigationServer2D.map_get_closest_point(_map(), point) if _map_ready() else point
 
 
 func _map() -> RID:
