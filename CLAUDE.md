@@ -19,7 +19,25 @@ movimiento con clic derecho, disparo automático al enemigo en rango.
 Listo cuando: mover y disparar se siente bien.
 
 Orden de trabajo acordado: pasos 1-2 hechos → A. movimiento moderno (hecho) →
-paso 3: enemigos y disparos (hecho) → **C. cobertura** → D. avance por saltos.
+paso 3: enemigos y disparos (hecho) → C. cobertura (hecha) → **D. avance por saltos**.
+
+## Cobertura (etapa C)
+- Decoración con cobertura = `CoverObject` (Sprite2D con `cover_type`, grupo "cover"). Tipos en
+  `data/cover_types/`: roca 0,75, sacos terreros 0,8 (forma LINE, solo protegen por sus caras
+  largas), árbol 0,5 (solo el tronco, radio 14), tocón 0,35, arbusto 0,2.
+- Direccional: protege si el objeto está entre el soldado (pegado a él, ≤ 18 px) y el tirador.
+  Reduce la probabilidad de impacto × (1 − protección); cuenta la mejor cobertura.
+- `Squad._plan_deployment()`: primero puestos a cubierto en el tramo (+ `cover_search_distance`),
+  luego dispersión. Al adelantarse, prefieren cobertura a tiro (`_advance_cover_point`).
+  Nadie se coloca encima de un obstáculo.
+- Prudencia (petición del usuario: nada de riesgos innecesarios por una cobertura):
+  al desplegarse no se adelantan más de 20 px de la línea ordenada si ese punto queda a tiro de
+  algún enemigo (sin enemigos cerca, sí pueden ocupar cobertura adelantada, p. ej. sacos
+  terreros). Al adelantarse para disparar, prefieren la cobertura más alejada que siga a tiro y
+  nunca quedan a menos del 60% del alcance de ningún enemigo.
+- Indicador: círculo de selección azul claro = a cubierto. Las copas de los árboles se vuelven
+  semitransparentes con soldados debajo.
+- Aún no hay línea de visión: rocas y árboles no cortan disparos (llegará con la niebla de guerra).
 
 ## Combate (paso 3)
 - Cada `Soldier` busca 2 veces/s al enemigo vivo más cercano dentro de `weapon_range`

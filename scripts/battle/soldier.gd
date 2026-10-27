@@ -21,6 +21,11 @@ const FACE_MOVEMENT_DISTANCE := 8.0
 ## Velocidad (px/s) a la que la animación de andar se reproduce a su ritmo normal.
 const WALK_ANIM_REFERENCE_SPEED := 70.0
 const SELECTION_COLOR := Color(0.45, 1.0, 0.45, 0.9)
+## Color del círculo de selección cuando está a cubierto frente al enemigo.
+const SELECTION_COVERED_COLOR := Color(0.45, 0.85, 1.0, 0.95)
+## Distancia del punto imaginario desde el que se comprueba la cobertura cuando no hay enemigo
+## a tiro (se usa la dirección hacia la que vigila).
+const COVER_CHECK_DISTANCE := 200.0
 ## Cada cuánto (segundos) comprueba si el camino recto a su puesto está libre.
 const PATH_CHECK_INTERVAL := 0.2
 ## Distancia entre los puntos que se comprueban a lo largo del camino recto.
@@ -58,6 +63,8 @@ var selected: bool = false:
 		queue_redraw()
 
 var _dead: bool = false
+## true si está a cubierto frente a su objetivo (o frente a donde vigila). Para el indicador.
+var _covered: bool = false
 var _slot: Vector2
 var _slot_facing: Vector2 = Vector2.DOWN
 var _facing: Vector2 = Vector2.DOWN
@@ -130,6 +137,16 @@ func distance_to_slot() -> float:
 
 func is_alive() -> bool:
 	return not _dead
+
+
+## Protección (0-1) que le da la cobertura que tenga pegada frente a un disparo desde shooter.
+## Si varias cubren a la vez, cuenta la mejor.
+func cover_protection_from(shooter: Vector2) -> float:
+	var best: float = 0.0
+	for node in get_tree().get_nodes_in_group("cover"):
+		var cover: CoverObject = node
+		best = maxf(best, cover.protection_for(global_position, shooter))
+	return best
 
 
 ## El enemigo al que está disparando ahora mismo, o null si no tiene ninguno a tiro.
@@ -208,6 +225,7 @@ func _update_combat(delta: float, walking: bool) -> void:
 	if _target_timer <= 0.0:
 		_target_timer = TARGET_CHECK_INTERVAL
 		_target = find_nearest_enemy(global_position, unit_type.weapon_range)
+		_update_covered()
 	if not _has_target():
 		_target = null
 	_fire_cooldown -= delta
@@ -221,6 +239,17 @@ func _update_combat(delta: float, walking: bool) -> void:
 	_fire_cooldown = randf_range(unit_type.fire_interval_min, unit_type.fire_interval_max)
 	if walking:
 		_fire_cooldown *= unit_type.moving_fire_interval_factor
+
+
+## Para el indicador: ¿está a cubierto frente a su objetivo o, si no tiene, frente a donde vigila?
+func _update_covered() -> void:
+	var threat: Vector2 = global_position + _slot_facing * COVER_CHECK_DISTANCE
+	if _has_target():
+		threat = _target.global_position
+	var covered: bool = cover_protection_from(threat) > 0.0
+	if covered != _covered:
+		_covered = covered
+		queue_redraw()
 
 
 ## El torso gira hacia el objetivo (sin pasar del giro máximo respecto a las piernas);
@@ -244,6 +273,7 @@ func _fire_at(target: Soldier, walking: bool) -> void:
 	var hit_chance: float = unit_type.accuracy * clampf(1.0 - 0.6 * distance / unit_type.weapon_range, 0.2, 1.0)
 	if walking:
 		hit_chance *= unit_type.moving_accuracy_factor
+	hit_chance *= 1.0 - target.cover_protection_from(global_position)
 	var hit: bool = randf() < hit_chance
 	var impact: Vector2 = target.global_position
 	if not hit:
@@ -319,7 +349,8 @@ func _is_straight_line_walkable(map: RID, from: Vector2, to: Vector2) -> bool:
 func _draw() -> void:
 	# Se dibuja debajo de los sprites del soldado.
 	if selected:
-		draw_arc(Vector2.ZERO, 13.0, 0.0, TAU, 24, SELECTION_COLOR, 1.5)
+		var color: Color = SELECTION_COVERED_COLOR if _covered else SELECTION_COLOR
+		draw_arc(Vector2.ZERO, 13.0, 0.0, TAU, 24, color, 1.5)
 
 
 ## Cada 3-7 s mira un poco a un lado durante 1-2 s y luego vuelve a su sector.

@@ -26,6 +26,13 @@ const ADVANCE_RANGE_FACTOR := 0.85
 const ADVANCE_ANGLE_OFFSETS: Array[float] = [0.0, 12.0, -12.0, 24.0, -24.0, 36.0, -36.0]
 ## Segundos sin que nadie de la compañía combata antes de volver a los puestos.
 const DISENGAGE_DELAY := 2.0
+## Al desplegarse, lo máximo (px) que se adelantan de la línea ordenada para buscar una
+## cobertura que quede al alcance de algún enemigo: no se meten por delante de la línea del
+## jugador si eso les pone a tiro. Sin enemigos cerca, sí pueden ocupar una cobertura adelantada.
+const COVER_MAX_FORWARD := 20.0
+## Al adelantarse para disparar, nunca se acercan a ningún enemigo a menos de esta fracción
+## del alcance: no se arriesgan más de lo necesario por una cobertura.
+const ADVANCE_MIN_RANGE_FACTOR := 0.6
 
 var members: Array[Soldier] = []
 
@@ -216,17 +223,23 @@ func _update_advance(delta: float) -> void:
 		# El que ya dispara se queda donde está (en su puesto o adelantado).
 		if _time >= _release_times[i] and members[i].current_target() == null:
 			_advance_spots[i] = _advance_position(i)
+			# Se reserva el puesto ya, para que el siguiente compañero lo tenga en cuenta.
+			var spot: Vector2 = _spots[i] if _advance_spots[i] == null else _advance_spots[i]
+			members[i].set_slot(spot, _spot_facings[i])
 
 
 ## Punto desde el que ya tendría a tiro al enemigo más cercano, o null si para eso tendría que
-## adelantarse más de lo permitido. Prueba primero el camino recto hacia el enemigo y, si ese
-## punto queda pegado a un compañero, otros ángulos alrededor del enemigo.
+## adelantarse más de lo permitido. Prefiere una cobertura a tiro; si no hay, prueba el camino
+## recto hacia el enemigo y, si ese punto queda pegado a un compañero, otros ángulos.
 func _advance_position(index: int) -> Variant:
 	var spot: Vector2 = _spots[index]
 	var reach: float = _unit_type.weapon_range * ADVANCE_RANGE_FACTOR
 	var enemy: Soldier = members[index].find_nearest_enemy(spot, reach + _unit_type.advance_leash)
 	if enemy == null or spot.distance_to(enemy.global_position) <= reach:
 		return null
+	var cover_point: Variant = _advance_cover_point(index, spot, enemy.global_position, reach)
+	if cover_point != null:
+		return cover_point
 	var from_enemy: Vector2 = (spot - enemy.global_position).normalized()
 	for degrees in ADVANCE_ANGLE_OFFSETS:
 		var point: Vector2 = enemy.global_position + from_enemy.rotated(deg_to_rad(degrees)) * reach
@@ -238,9 +251,39 @@ func _advance_position(index: int) -> Variant:
 			if walkable.distance_to(point) > 8.0:
 				continue
 			point = walkable
-		if _is_spot_free(point, members[index]):
+		var too_close: Soldier = members[index].find_nearest_enemy(
+			point, _unit_type.weapon_range * ADVANCE_MIN_RANGE_FACTOR)
+		if too_close == null and _is_spot_free(point, members[index]):
 			return point
 	return null
+
+
+## La mejor cobertura frente al enemigo que esté a tiro de él y a no más de advance_leash del
+## puesto del soldado, o null si no hay ninguna libre. Prefiere las que quedan más lejos del
+## enemigo (al límite del alcance) y descarta las que le acercarían demasiado a cualquier enemigo.
+func _advance_cover_point(index: int, spot: Vector2, enemy_position: Vector2, reach: float) -> Variant:
+	var best: Variant = null
+	var best_score: float = -INF
+	var min_enemy_distance: float = _unit_type.weapon_range * ADVANCE_MIN_RANGE_FACTOR
+	for node in get_tree().get_nodes_in_group("cover"):
+		var cover: CoverObject = node
+		if cover.global_position.distance_to(spot) > _unit_type.advance_leash + 40.0:
+			continue
+		var threat_dir: Vector2 = (enemy_position - cover.global_position).normalized()
+		for point in cover.cover_points(threat_dir):
+			var travel: float = spot.distance_to(point)
+			var to_target: float = point.distance_to(enemy_position)
+			if travel > _unit_type.advance_leash or to_target > reach:
+				continue
+			var closest_enemy: Soldier = members[index].find_nearest_enemy(point, min_enemy_distance)
+			if closest_enemy != null:
+				continue  # demasiado cerca de algún enemigo
+			# Cuanto más se acerca al enemigo de lo necesario, peor.
+			var score: float = cover.cover_type.protection - travel / 400.0 - (reach - to_target) / 150.0
+			if score > best_score and _is_valid_stand_point(point) and _is_spot_free(point, members[index]):
+				best = point
+				best_score = score
+	return best
 
 
 ## true si ningún otro soldado de la compañía va a quedar demasiado cerca de point.
@@ -299,9 +342,10 @@ func _trim_trail() -> void:
 			return
 
 
-## Elige los puntos de despliegue de la escuadra dentro de su tramo del frente: dispersos,
-## irregulares, en suelo transitable y a distancia mínima de los demás soldados.
-## En la etapa de cobertura esta función se sustituirá por la búsqueda de cobertura.
+## Elige los puntos de despliegue de la escuadra en su tramo del frente:
+## 1) primero, puestos a cubierto (detrás de rocas, árboles, sacos...) frente a la dirección facing;
+## 2) los que no encuentren cobertura se dispersan de forma irregular por el tramo.
+## Siempre en suelo transitable, fuera de los obstáculos y a distancia mínima de los demás.
 func _plan_deployment(destination: Vector2, facing: Vector2, frontage: float, front_center: Vector2,
 		front_half_width: float, occupied: Array[Vector2]) -> void:
 	var right := Vector2(-facing.y, facing.x)
@@ -310,24 +354,20 @@ func _plan_deployment(destination: Vector2, facing: Vector2, frontage: float, fr
 	# Profundidad de la zona: la justa para que quepan los soldados con su separación.
 	var area_per_soldier: float = pow(min_spacing * 1.4, 2.0)
 	var half_depth: float = maxf(14.0, count * area_per_soldier / maxf(frontage, 1.0) / 2.0)
-	var map_ready: bool = _map_ready()
-	_spots = PackedVector2Array()
-	_spot_facings = PackedVector2Array()
-	for i in count:
+	var chosen_spots: Array[Vector2] = _pick_cover_spots(destination, facing, frontage / 2.0,
+		half_depth, count, occupied)
+	var open_count: int = count - chosen_spots.size()
+	for i in open_count:
 		var spacing: float = min_spacing
 		var chosen: Vector2 = destination
 		var placed: bool = false
 		while not placed:
 			for attempt in DEPLOY_ATTEMPTS:
 				# Cada soldado se reparte en su franja del tramo, con azar dentro de ella.
-				var lateral: float = ((i + _rng.randf()) / count - 0.5) * frontage
+				var lateral: float = ((i + _rng.randf()) / open_count - 0.5) * frontage
 				var depth: float = _rng.randf_range(-half_depth, half_depth)
 				var candidate: Vector2 = destination + right * lateral - facing * depth
-				if map_ready:
-					var walkable: Vector2 = NavigationServer2D.map_get_closest_point(_map(), candidate)
-					if walkable.distance_to(candidate) > 1.0:
-						continue
-				if _far_from_all(candidate, occupied, spacing):
+				if _is_valid_stand_point(candidate) and _far_from_all(candidate, occupied, spacing):
 					chosen = candidate
 					placed = true
 					break
@@ -335,11 +375,62 @@ func _plan_deployment(destination: Vector2, facing: Vector2, frontage: float, fr
 			if spacing < 4.0:
 				placed = true
 		occupied.append(chosen)
-		_spots.append(chosen)
+		chosen_spots.append(chosen)
+	_spots = PackedVector2Array()
+	_spot_facings = PackedVector2Array()
+	for spot in chosen_spots:
+		_spots.append(spot)
 		# Abanico: cuanto más a un lado del frente, más mira hacia ese lado.
-		var side_t: float = clampf((chosen - front_center).dot(right) / maxf(front_half_width, 1.0), -1.0, 1.0)
+		var side_t: float = clampf((spot - front_center).dot(right) / maxf(front_half_width, 1.0), -1.0, 1.0)
 		var angle: float = deg_to_rad(side_t * _unit_type.sector_spread_degrees + _rng.randf_range(-6.0, 6.0))
 		_spot_facings.append(facing.rotated(angle))
+
+
+## Puestos a cubierto frente a facing dentro del tramo (ampliado con cover_search_distance),
+## de mejor a peor: más protección y más cerca de la línea del frente. Como mucho max_count.
+func _pick_cover_spots(destination: Vector2, facing: Vector2, half_width: float, half_depth: float,
+		max_count: int, occupied: Array[Vector2]) -> Array[Vector2]:
+	var right := Vector2(-facing.y, facing.x)
+	var margin: float = _unit_type.cover_search_distance
+	var candidates: Array[Array] = []
+	for node in get_tree().get_nodes_in_group("cover"):
+		var cover: CoverObject = node
+		var offset: Vector2 = cover.global_position - destination
+		if absf(offset.dot(right)) > half_width + margin or absf(offset.dot(facing)) > half_depth + margin:
+			continue
+		for point in cover.cover_points(facing):
+			var forward: float = (point - destination).dot(facing)
+			if forward > COVER_MAX_FORWARD and _in_enemy_range(point):
+				continue  # obligaría a meterse por delante de la línea, a tiro del enemigo
+			var score: float = cover.cover_type.protection - absf(forward) / 400.0
+			candidates.append([point, score])
+	candidates.sort_custom(func(a: Array, b: Array) -> bool: return a[1] > b[1])
+	var result: Array[Vector2] = []
+	for candidate in candidates:
+		if result.size() >= max_count:
+			break
+		var point: Vector2 = candidate[0]
+		if _is_valid_stand_point(point) and _far_from_all(point, occupied, _unit_type.deploy_spacing_min):
+			occupied.append(point)
+			result.append(point)
+	return result
+
+
+## true si algún enemigo vivo tiene point dentro de su alcance.
+func _in_enemy_range(point: Vector2) -> bool:
+	return members[0].find_nearest_enemy(point, _unit_type.weapon_range) != null
+
+
+## Un soldado puede ponerse en point si es suelo transitable y no está dentro de un obstáculo.
+func _is_valid_stand_point(point: Vector2) -> bool:
+	if _map_ready():
+		if NavigationServer2D.map_get_closest_point(_map(), point).distance_to(point) > 1.0:
+			return false
+	for node in get_tree().get_nodes_in_group("cover"):
+		var cover: CoverObject = node
+		if cover.distance_to_point(point) < 4.0:
+			return false
+	return true
 
 
 func _far_from_all(point: Vector2, others: Array[Vector2], spacing: float) -> bool:

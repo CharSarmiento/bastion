@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="CoverType" format=3]
+
+[ext_resource type="Script" path="res://scripts/shared/cover_type.gd" id="1_bgk20"]
+
+[resource]
+script = ExtResource("1_bgk20")
+display_name = "Árbol"
+fixed_radius = 14.0
+fade_when_units_below = true

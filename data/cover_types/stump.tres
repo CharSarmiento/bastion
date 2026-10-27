@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="CoverType" format=3]
+
+[ext_resource type="Script" path="res://scripts/shared/cover_type.gd" id="1_8ew7o"]
+
+[resource]
+script = ExtResource("1_8ew7o")
+display_name = "Tocón"
+protection = 0.35
+size_factor = 0.6

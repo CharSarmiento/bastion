@@ -46,6 +46,8 @@ extends Resource
 @export_group("Despliegue")
 ## Distancia mínima entre soldados al desplegarse, en píxeles.
 @export var deploy_spacing_min: float = 26.0
+## Hasta qué distancia (píxeles) fuera de su tramo del frente busca cada escuadra cobertura.
+@export var cover_search_distance: float = 100.0
 ## Anchura del frente cuando se da una orden con un clic simple, en píxeles.
 @export var default_front_width: float = 260.0
 @export var min_front_width: float = 80.0
