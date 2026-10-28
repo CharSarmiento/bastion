@@ -42,6 +42,10 @@ const MUZZLE_OFFSET := Vector2(-3.0, 15.0)
 const SHOT_POSE_DURATION := 0.08
 const HIT_FLASH_COLOR := Color(1.0, 0.45, 0.45)
 const HIT_FLASH_DURATION := 0.12
+## Aspecto de un soldado clavado (agachado): no hay sprites de agachado en el pack, así que se
+## dibuja algo más pequeño y oscuro.
+const PINNED_SCALE := 0.85
+const PINNED_MODULATE := Color(0.72, 0.72, 0.72)
 ## Material que tiñe el uniforme de los enemigos (compartido por todos).
 const ENEMY_TINT_SHADER := preload("res://scenes/battle/team_tint.gdshader")
 
@@ -67,6 +71,20 @@ var max_speed: float = 100.0
 var speed_factor: float = 1.0
 ## Retirada combatiendo: camina de espaldas, mirando al enemigo (lo activa su escuadra).
 var backpedal: bool = false
+## Su compañía (la asigna ella al crearlo). Se le avisa de los disparos recibidos y de los
+## enemigos abatidos, para la moral.
+var company: Formation = null
+## Compañía clavada: el soldado se agacha (se dibuja más pequeño y oscuro), dispara menos y peor.
+var pinned: bool = false:
+	set(value):
+		pinned = value
+		if is_node_ready():
+			_visual.scale = Vector2.ONE * (PINNED_SCALE if pinned else 1.0)
+			_base_modulate = PINNED_MODULATE if pinned else Color.WHITE
+			if _hit_flash_timer <= 0.0:
+				_visual.modulate = _base_modulate
+## Compañía rota o huyendo: no dispara.
+var can_fire: bool = true
 var selected: bool = false:
 	set(value):
 		selected = value
@@ -91,6 +109,8 @@ var _target_timer: float
 var _fire_cooldown: float
 var _shot_pose_timer: float = 0.0
 var _hit_flash_timer: float = 0.0
+## Color normal del soldado (más oscuro si está clavado); el destello al ser herido vuelve a él.
+var _base_modulate: Color = Color.WHITE
 var _body_texture: Texture2D
 var _effects: BattleEffects = null
 
@@ -192,9 +212,12 @@ func receive_fire(shooter: Vector2) -> void:
 	if _dead or unit_type == null:
 		return
 	var gain: float = unit_type.suppression_per_shot
-	if cover_protection_from(shooter) > 0.0:
+	var covered: bool = cover_protection_from(shooter) > 0.0
+	if covered:
 		gain *= 0.5
 	suppression = minf(1.0, suppression + gain)
+	if is_instance_valid(company):
+		company.on_fire_received(global_position, shooter, covered)
 
 
 func take_damage(amount: float) -> void:
@@ -270,7 +293,7 @@ func _update_combat(delta: float, walking: bool) -> void:
 	if not _has_target():
 		_target = null
 	_fire_cooldown -= delta
-	if _target == null or _fire_cooldown > 0.0:
+	if _target == null or _fire_cooldown > 0.0 or not can_fire:
 		return
 	# Solo dispara con el fusil apuntando al objetivo.
 	var to_target: Vector2 = _target.global_position - global_position
@@ -281,6 +304,13 @@ func _update_combat(delta: float, walking: bool) -> void:
 	if walking:
 		_fire_cooldown *= unit_type.moving_fire_interval_factor
 	_fire_cooldown *= 1.0 + suppression * unit_type.suppression_fire_delay
+	if pinned:
+		_fire_cooldown *= unit_type.pinned_fire_interval_factor
+
+
+## true si está a cubierto frente a su objetivo (o frente a donde vigila).
+func is_covered() -> bool:
+	return _covered
 
 
 ## Para el indicador: ¿está a cubierto frente a su objetivo o, si no tiene, frente a donde vigila?
@@ -321,6 +351,10 @@ func _fire_at(target: Soldier, walking: bool) -> void:
 	if walking:
 		hit_chance *= unit_type.moving_accuracy_factor
 	hit_chance *= 1.0 - suppression * unit_type.suppression_accuracy_penalty
+	if pinned:
+		hit_chance *= unit_type.pinned_accuracy_factor
+	if target.pinned:
+		hit_chance *= target.unit_type.pinned_target_factor
 	hit_chance *= 1.0 - target.cover_protection_from(global_position)
 	var hit: bool = randf() < hit_chance
 	target.receive_fire(global_position)
@@ -336,6 +370,8 @@ func _fire_at(target: Soldier, walking: bool) -> void:
 		_shot_pose_timer = SHOT_POSE_DURATION
 	if hit:
 		target.take_damage(unit_type.damage)
+		if not target.is_alive() and is_instance_valid(company):
+			company.on_enemy_killed()
 
 
 func _update_effect_timers(delta: float) -> void:
@@ -346,7 +382,7 @@ func _update_effect_timers(delta: float) -> void:
 	if _hit_flash_timer > 0.0:
 		_hit_flash_timer -= delta
 		if _hit_flash_timer <= 0.0:
-			_visual.modulate = Color.WHITE
+			_visual.modulate = _base_modulate
 
 
 func _die() -> void:
@@ -356,6 +392,7 @@ func _die() -> void:
 	_unregister()
 	set_physics_process(false)
 	_visual.modulate = Color.WHITE
+	_visual.scale = Vector2.ONE
 	_legs.hide()
 	_body.hide()
 	_death.show()

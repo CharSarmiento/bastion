@@ -69,7 +69,8 @@ func selection_holds() -> bool:
 func toggle_hold() -> void:
 	var value: bool = not selection_holds()
 	for formation in _selected:
-		formation.hold_position = value
+		if formation.can_retreat():
+			formation.hold_position = value
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -281,11 +282,13 @@ func _order_move(target: Vector2, order: Order) -> void:
 	_markers.append([target, MARKER_DURATION, _order_color(order)])
 
 
+## Las compañías clavadas solo obedecen la retirada; las rotas o que huyen, nada.
 func _give_move_order(formation: Formation, target: Vector2, facing: Vector2, width: float,
 		order: Order) -> void:
 	if order == Order.RETREAT:
-		formation.retreat_to(target, facing, width)
-	else:
+		if formation.can_retreat():
+			formation.retreat_to(target, facing, width)
+	elif formation.can_move():
 		formation.move_to(target, facing, width, order == Order.BOUND)
 
 
@@ -297,7 +300,8 @@ func _order_advance(target: Vector2) -> void:
 		return
 	var offset: Vector2 = target - _selection_center()
 	for formation in _selected:
-		formation.advance_by(offset)
+		if formation.can_move():
+			formation.advance_by(offset)
 	_markers.append([target, MARKER_DURATION, ADVANCE_COLOR])
 
 

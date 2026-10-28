@@ -228,6 +228,10 @@ func begin_retreat() -> void:
 	_hold_position = true
 
 
+func is_retreating() -> bool:
+	return _retreating
+
+
 func _end_retreat() -> void:
 	_retreating = false
 	for soldier in members:
@@ -380,9 +384,9 @@ func _update_advance(delta: float) -> void:
 			_advance_spots.fill(null)
 		return
 	_disengaged_time = 0.0
-	# Con "Mantener posición", o tras una retirada, tampoco: se quedan donde están (si alguien
-	# ya se había adelantado, sigue allí hasta que acabe el combate).
-	if company.hold_position or _hold_position:
+	# Con "Mantener posición", tras una retirada o con la moral quebrantada, tampoco: se quedan
+	# donde están (si alguien ya se había adelantado, sigue allí hasta que acabe el combate).
+	if company.hold_position or _hold_position or company.morale_state != Formation.Morale.FIRM:
 		return
 	_advance_timer -= delta
 	if _advance_timer > 0.0:

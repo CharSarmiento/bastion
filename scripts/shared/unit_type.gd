@@ -57,6 +57,56 @@ extends Resource
 ## ...y el tiempo entre disparos por (1 + este valor).
 @export var suppression_fire_delay: float = 1.0
 
+@export_group("Moral")
+## La moral (0-100) es de toda la compañía. Moral que se pierde por cada disparo recibido por un
+## soldado (acierte o no). A cubierto, la mitad.
+@export var morale_per_shot: float = 0.5
+## Los disparos que llegan por el flanco o la espalda quitan esta cantidad de veces más moral.
+@export var morale_flank_factor: float = 2.0
+## Moral que se pierde por cada baja propia; aumenta con las bajas que ya lleve la compañía
+## (con la mitad de los soldados caídos, cada baja quita 1,5 veces esto).
+@export var morale_per_casualty: float = 6.0
+## Moral que se gana por cada enemigo abatido.
+@export var morale_per_kill: float = 1.5
+## Moral que se pierde cuando se rompe una compañía amiga cercana...
+@export var morale_friend_broken: float = 15.0
+## ...y la que se gana cuando se rompe una compañía enemiga cercana.
+@export var morale_enemy_broken: float = 10.0
+## Distancia (píxeles) a la que una compañía tiene en cuenta a las demás (amigos cerca,
+## compañías que se rompen).
+@export var morale_nearby_radius: float = 450.0
+## Con una compañía amiga cerca se pierde esta fracción de la moral de cada disparo.
+@export_range(0.0, 1.0) var morale_friend_loss_factor: float = 0.75
+## Segundos sin recibir fuego hasta que la moral empieza a recuperarse.
+@export var morale_recovery_delay: float = 4.0
+## Moral que se recupera por segundo...
+@export var morale_recovery: float = 3.0
+## ...multiplicada por esto si la mayoría está a cubierto, y otra vez si hay amigos cerca.
+@export var morale_recovery_bonus: float = 1.5
+## Por debajo de esta moral la compañía queda clavada (se pega al suelo y a la cobertura)...
+@export var pinned_threshold: float = 35.0
+## ...y deja de estarlo al recuperar esta.
+@export var pinned_recover_threshold: float = 50.0
+## Por debajo de esta moral la compañía se rompe y retrocede sin obedecer.
+@export var broken_threshold: float = 15.0
+## Segundos que una compañía rota tiene que pasar sin recibir fuego para rehacerse...
+@export var rally_time: float = 6.0
+## ...y moral con la que vuelve a obedecer.
+@export var rally_morale: float = 40.0
+## Distancia (píxeles) que retrocede una compañía al romperse.
+@export var rout_distance: float = 450.0
+## Una compañía rota que sufre estas bajas mientras está rota huye y se pierde.
+@export_range(1, 12) var broken_flee_casualties: int = 2
+## Clavados (pegados al suelo) pierden por cada disparo esta fracción de la moral normal: así da
+## tiempo a ordenar la retirada antes de que se rompan.
+@export_range(0.0, 1.0) var pinned_morale_loss_factor: float = 0.5
+## Clavados: la puntería se multiplica por esto...
+@export_range(0.0, 1.0) var pinned_accuracy_factor: float = 0.5
+## ...y el tiempo entre disparos por esto otro.
+@export var pinned_fire_interval_factor: float = 2.0
+## Pegados al suelo son más difíciles de alcanzar: la probabilidad de que les den se multiplica por esto.
+@export_range(0.0, 1.0) var pinned_target_factor: float = 0.6
+
 @export_group("Avance por saltos")
 ## Longitud de referencia de los saltos, en píxeles: la escuadra que salta termina la mitad de
 ## esta distancia por delante de la escuadra más avanzada.

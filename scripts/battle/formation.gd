@@ -7,6 +7,14 @@ extends Node2D
 ## La posición de este nodo es la media de las posiciones de sus soldados.
 
 enum Team { PLAYER, ENEMY }
+## Estado de la moral de la compañía:
+## FIRM: obedece todas las órdenes.
+## PINNED (clavada): se pega a la cobertura, dispara menos y peor; solo acepta Retirada y
+##   "Mantener posición".
+## BROKEN (rota): retrocede hacia su retaguardia sin obedecer ni disparar; si la dejan en paz,
+##   se rehace.
+## FLEEING (huye): corre hasta salir por su borde del mapa y se pierde.
+enum Morale { FIRM, PINNED, BROKEN, FLEEING }
 
 ## Distancia (px) a su tramo final a partir de la cual una escuadra ha terminado de saltar.
 const BOUND_ARRIVED_DISTANCE := 24.0
@@ -14,6 +22,19 @@ const BOUND_ARRIVED_DISTANCE := 24.0
 const BOUND_FINAL_SNAP := 40.0
 ## Si una escuadra tarda más que esto (segundos) en terminar un salto, salta la siguiente igualmente.
 const BOUND_TIMEOUT := 20.0
+## Un disparo llega por el flanco si viene con más de este ángulo (grados) respecto al frente.
+const FLANK_ANGLE_DEGREES := 75.0
+## Cada cuánto (segundos) se comprueba si hay compañías amigas cerca y cuántos están a cubierto.
+const MORALE_CHECK_INTERVAL := 0.5
+## Una compañía rota que lleva menos de esto (segundos) sin recibir fuego sigue bajo el fuego.
+const UNDER_FIRE_TIME := 2.0
+## Un soldado que huye sale del mapa al quedar a menos de esto (píxeles) del borde.
+const EXIT_MARGIN := 40.0
+
+## Todas las compañías en la batalla (más rápido que recorrer el grupo "formations").
+static var all: Array[Formation] = []
+## Límites del mapa (los pone la escena de batalla). Las compañías que huyen salen por ellos.
+static var map_bounds: Rect2 = Rect2()
 
 @export var unit_type: UnitType
 @export var team: Team = Team.PLAYER
@@ -29,6 +50,11 @@ var bounding: bool = false
 ## "Mantener posición" (interruptor del jugador, tecla H): nadie se adelanta por su cuenta para
 ## disparar. Dura hasta que se desactive, aunque la compañía reciba otras órdenes.
 var hold_position: bool = false
+## Moral de la compañía (0-100) y su estado.
+var morale: float = 100.0
+var morale_state: Morale = Morale.FIRM
+## Hacia dónde queda su retaguardia (su borde del mapa): lo contrario de hacia donde mira al empezar.
+var home_direction: Vector2 = Vector2.DOWN
 var selected: bool = false:
 	set(value):
 		selected = value
@@ -46,11 +72,28 @@ var _bound_positions: Dictionary = {}
 var _bound_frontage: float = 0.0
 var _bound_mover: Squad = null
 var _bound_time: float = 0.0
+## Moral: segundos desde el último disparo recibido, si hay amigos cerca, fracción de soldados
+## a cubierto y temporizador de esas comprobaciones.
+var _time_since_fire: float = 1000.0
+var _friend_near: bool = false
+var _covered_fraction: float = 0.0
+var _morale_check_timer: float = 0.0
+## Bajas sufridas desde que la compañía se rompió.
+var _broken_casualties: int = 0
+
+
+func _enter_tree() -> void:
+	all.append(self)
+
+
+func _exit_tree() -> void:
+	all.erase(self)
 
 
 func _ready() -> void:
 	add_to_group("formations")
 	facing = facing.normalized()
+	home_direction = -facing
 	_spawn()
 
 
@@ -102,6 +145,16 @@ func advance_by(offset: Vector2) -> void:
 		squad.order_shift(offset, occupied)
 
 
+## true si acepta órdenes de movimiento (mover, saltos, avanzar): solo con la moral firme.
+func can_move() -> bool:
+	return morale_state == Morale.FIRM
+
+
+## true si acepta la retirada y "Mantener posición": también clavada, pero no rota ni huyendo.
+func can_retreat() -> bool:
+	return morale_state == Morale.FIRM or morale_state == Morale.PINNED
+
+
 ## Número de escuadras (para dibujar la vista previa del frente).
 func squad_count() -> int:
 	return squads.size()
@@ -133,6 +186,176 @@ func _physics_process(delta: float) -> void:
 	global_position = sum / soldiers.size()
 	if bounding:
 		_update_bounding(delta)
+	_update_morale(delta)
+
+
+# --- Moral ---
+
+## Un soldado de la compañía ha recibido un disparo (acierte o no) desde shooter.
+func on_fire_received(soldier_position: Vector2, shooter: Vector2, covered: bool) -> void:
+	_time_since_fire = 0.0
+	if morale_state == Morale.BROKEN or morale_state == Morale.FLEEING:
+		return  # ya corren: lo que decide si se rehacen o huyen son las bajas
+	var loss: float = unit_type.morale_per_shot
+	if covered:
+		loss *= 0.5
+	var from_front: float = rad_to_deg(absf(facing.angle_to(shooter - soldier_position)))
+	if from_front > FLANK_ANGLE_DEGREES:
+		loss *= unit_type.morale_flank_factor
+	if _friend_near:
+		loss *= unit_type.morale_friend_loss_factor
+	if morale_state == Morale.PINNED:
+		loss *= unit_type.pinned_morale_loss_factor
+	_change_morale(-loss)
+
+
+## Un soldado de la compañía ha abatido a un enemigo.
+func on_enemy_killed() -> void:
+	_change_morale(unit_type.morale_per_kill)
+
+
+func _change_morale(amount: float) -> void:
+	morale = clampf(morale + amount, 0.0, 100.0)
+
+
+func _update_morale(delta: float) -> void:
+	_time_since_fire += delta
+	_morale_check_timer -= delta
+	if _morale_check_timer <= 0.0:
+		_morale_check_timer = MORALE_CHECK_INTERVAL
+		_update_morale_surroundings()
+	if _time_since_fire >= unit_type.morale_recovery_delay:
+		var recovery: float = unit_type.morale_recovery
+		if _covered_fraction >= 0.5:
+			recovery *= unit_type.morale_recovery_bonus
+		if _friend_near:
+			recovery *= unit_type.morale_recovery_bonus
+		_change_morale(recovery * delta)
+	match morale_state:
+		Morale.FIRM:
+			if morale < unit_type.broken_threshold:
+				_set_morale_state(Morale.BROKEN)
+			elif morale < unit_type.pinned_threshold:
+				_set_morale_state(Morale.PINNED)
+		Morale.PINNED:
+			if morale < unit_type.broken_threshold:
+				_set_morale_state(Morale.BROKEN)
+			elif morale >= unit_type.pinned_recover_threshold:
+				_set_morale_state(Morale.FIRM)
+		Morale.BROKEN:
+			# (Si sufren bajas mientras están rotos, _on_soldier_died los hace huir.)
+			if _is_settled():
+				if _time_since_fire >= unit_type.rally_time:
+					# Se rehacen: vuelven a obedecer, con la moral justa.
+					morale = maxf(morale, unit_type.rally_morale)
+					_set_morale_state(Morale.FIRM)
+				elif _time_since_fire < UNDER_FIRE_TIME:
+					_rout()  # han llegado, pero siguen bajo el fuego: retroceden más
+		Morale.FLEEING:
+			_update_fleeing()
+
+
+## Comprueba si hay compañías amigas cerca y qué parte de la compañía está a cubierto.
+func _update_morale_surroundings() -> void:
+	_friend_near = false
+	var radius_squared: float = unit_type.morale_nearby_radius * unit_type.morale_nearby_radius
+	for other in all:
+		if other != self and other.team == team and other.can_retreat() \
+				and other.global_position.distance_squared_to(global_position) <= radius_squared:
+			_friend_near = true
+			break
+	var covered: int = 0
+	for soldier in soldiers:
+		if soldier.is_covered():
+			covered += 1
+	_covered_fraction = float(covered) / soldiers.size()
+
+
+func _set_morale_state(state: Morale) -> void:
+	if state == morale_state:
+		return
+	var previous: Morale = morale_state
+	morale_state = state
+	for soldier in soldiers:
+		soldier.pinned = state == Morale.PINNED
+		soldier.can_fire = state == Morale.FIRM or state == Morale.PINNED
+	match state:
+		Morale.PINNED:
+			# Se tiran al suelo donde están, pegados a la cobertura más cercana (salvo que ya
+			# se estuvieran retirando).
+			if not _any_squad_retreating():
+				advance_by(Vector2.ZERO)
+		Morale.BROKEN:
+			_broken_casualties = 0
+			_rout()
+			_notify_nearby_companies()
+		Morale.FLEEING:
+			_flee()
+			if previous != Morale.BROKEN:
+				_notify_nearby_companies()
+
+
+## Avisa a las compañías cercanas de que esta se ha roto: a las amigas les baja la moral y a las
+## enemigas les sube. (Se usa pocas veces, solo cuando una compañía se rompe.)
+func _notify_nearby_companies() -> void:
+	var radius_squared: float = unit_type.morale_nearby_radius * unit_type.morale_nearby_radius
+	for other in all:
+		if other == self or other.global_position.distance_squared_to(global_position) > radius_squared:
+			continue
+		if other.team == team:
+			other._change_morale(-other.unit_type.morale_friend_broken)
+		else:
+			other._change_morale(other.unit_type.morale_enemy_broken)
+
+
+## Rota: retrocede rout_distance hacia su retaguardia, corriendo y mirando hacia el enemigo.
+func _rout() -> void:
+	var target: Vector2 = global_position + home_direction * unit_type.rout_distance
+	if map_bounds.has_area():
+		var inner: Rect2 = map_bounds.grow(-EXIT_MARGIN * 2.0)
+		target = target.clamp(inner.position, inner.end)
+	_run_to(target, -home_direction)
+
+
+## Huye: corre hasta su borde del mapa.
+func _flee() -> void:
+	var target: Vector2 = global_position + home_direction * 100000.0
+	if map_bounds.has_area():
+		target = target.clamp(map_bounds.position, map_bounds.end)
+	_run_to(target, home_direction)
+
+
+func _run_to(target: Vector2, new_facing: Vector2) -> void:
+	bounding = false
+	_bound_mover = null
+	facing = new_facing.normalized()
+	_deploy(target, facing, unit_type.default_front_width, false, unit_type.retreat_run_factor)
+
+
+## Los que huyen desaparecen al llegar al borde del mapa (o a su punto de huida, si el borde
+## no es transitable). Sin soldados, la compañía se pierde.
+func _update_fleeing() -> void:
+	var inner: Rect2 = map_bounds.grow(-EXIT_MARGIN)
+	for squad in squads.duplicate():
+		var arrived: bool = squad.is_settled()
+		for soldier in squad.members.duplicate():
+			if arrived or (map_bounds.has_area() and not inner.has_point(soldier.global_position)):
+				_remove_soldier(soldier)
+				soldier.queue_free()
+
+
+func _any_squad_retreating() -> bool:
+	for squad in squads:
+		if squad.is_retreating():
+			return true
+	return false
+
+
+func _is_settled() -> bool:
+	for squad in squads:
+		if not squad.is_settled():
+			return false
+	return true
 
 
 ## Avance por saltos: cuando la escuadra que salta ha terminado de colocarse, salta la que va
@@ -213,6 +436,7 @@ func _spawn() -> void:
 		soldier.top_level = true
 		soldier.unit_type = unit_type
 		soldier.team = team
+		soldier.company = self
 		soldier.died.connect(_on_soldier_died)
 		add_child(soldier)
 		soldier.global_position = start
@@ -226,9 +450,22 @@ func _spawn() -> void:
 	_deploy(start, facing, unit_type.default_front_width, true)
 
 
-## Quita al caído de la compañía y de su escuadra. Si no queda nadie, la compañía desaparece
-## (los cuerpos se quedan en el mapa: ya no son hijos de la compañía).
+## Una baja: baja la moral (más cuantas más bajas lleve la compañía). Si ya estaba rota, huye.
+## Los cuerpos se quedan en el mapa: ya no son hijos de la compañía.
 func _on_soldier_died(soldier: Soldier) -> void:
+	_remove_soldier(soldier)
+	if soldiers.is_empty():
+		return
+	var lost_fraction: float = 1.0 - float(soldiers.size()) / unit_type.soldier_count
+	_change_morale(-unit_type.morale_per_casualty * (1.0 + lost_fraction))
+	if morale_state == Morale.BROKEN:
+		_broken_casualties += 1
+		if _broken_casualties >= unit_type.broken_flee_casualties:
+			_set_morale_state(Morale.FLEEING)
+
+
+## Quita al soldado de la compañía y de su escuadra. Si no queda nadie, la compañía desaparece.
+func _remove_soldier(soldier: Soldier) -> void:
 	soldiers.erase(soldier)
 	for squad in squads:
 		if soldier in squad.members:
@@ -241,20 +478,21 @@ func _on_soldier_died(soldier: Soldier) -> void:
 		queue_free.call_deferred()
 
 
-func _deploy(center: Vector2, direction: Vector2, width: float, instant: bool) -> void:
+func _deploy(center: Vector2, direction: Vector2, width: float, instant: bool,
+		speed_factor: float = 1.0) -> void:
 	var segment: float = width / squads.size()
 	var occupied: Array[Vector2] = _friendly_spots()
 	for assignment in _assign_segments(center, direction, width):
 		var squad: Squad = assignment[0]
-		squad.order_move(assignment[1], direction, segment, center, width / 2.0, occupied, instant)
+		squad.order_move(assignment[1], direction, segment, center, width / 2.0, occupied, instant,
+			speed_factor)
 
 
 ## Puestos de las demás compañías del mismo bando (los que ocupan o a los que se dirigen),
 ## para que al desplegarse nadie escoja un sitio ya tomado por otra compañía.
 func _friendly_spots() -> Array[Vector2]:
 	var result: Array[Vector2] = []
-	for node in get_tree().get_nodes_in_group("formations"):
-		var other: Formation = node
+	for other in all:
 		if other != self and other.team == team:
 			for squad in other.squads:
 				result.append_array(squad.planned_spots())

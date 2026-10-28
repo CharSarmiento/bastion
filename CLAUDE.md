@@ -23,14 +23,37 @@ con barra de órdenes y atajos, y rendimiento revisado (ver secciones de abajo).
 
 Orden de trabajo acordado para la Fase 2 (decidir el comportamiento y los controles con el
 usuario al empezar cada paso):
-1. **Moral** (sobre la supresión que ya existe). ← siguiente
-2. **Victoria y derrota.**
+1. **Moral** (hecha, ver "Moral").
+2. **Victoria y derrota.** ← siguiente
 3. **IA enemiga básica** (el enemigo usa las mismas órdenes que el jugador).
 4. **Línea de visión y niebla de guerra.**
 5. **HUD y menús** (idea del usuario: un MVP de infantería completo y presentable antes de
    añadir más tipos de unidad).
 6. **Tanques**, 7. **morteros**, 8. **reconocimiento**.
 Cada orden nueva lleva botón en la barra de órdenes y un atajo de teclado (decisión del usuario).
+
+## Moral (Fase 2, paso 1; decisiones del usuario)
+- Una moral (0-100) por compañía (`Formation.morale`, `morale_state`), en los dos bandos. Todos
+  los números en el grupo "Moral" de `UnitType`.
+- Baja: cada disparo recibido (`on_fire_received`; la mitad a cubierto, × `morale_flank_factor`
+  si llega con más de 75° respecto al frente, × 0,75 con una compañía amiga cerca, × 0,5 si
+  está clavada); cada baja propia (más cuantas más lleve); una compañía amiga cercana que se
+  rompe (−15). Sube: tras `morale_recovery_delay` s sin fuego (× 1,5 con la mayoría a cubierto
+  y otra vez con amigos cerca), cada enemigo abatido y cada compañía enemiga cercana que se rompe.
+- Estados (`Formation.Morale`):
+  FIRM → PINNED (clavada, < 35; vuelve a FIRM con ≥ 50) → BROKEN (rota, < 15) → FLEEING (huye).
+  - Clavada: `advance_by(Vector2.ZERO)` (se pegan a la cobertura cercana), puntería × 0,5,
+    cadencia × 0,5, se les acierta × 0,6. Se dibujan más pequeños y oscuros (no hay sprites de
+    agachado). Solo aceptan Retirada y "Mantener posición" (`can_retreat()`; `can_move()` = solo FIRM).
+  - Rota: corre `rout_distance` hacia `home_direction` (lo contrario de hacia donde miraba al
+    empezar) sin obedecer ni disparar; los disparos ya no le quitan moral. Si llega y pasa
+    `rally_time` s sin fuego, se rehace (FIRM con 40); si llega y sigue bajo el fuego, retrocede más.
+  - Huye: con `broken_flee_casualties` (2) bajas estando rota. Corre hasta su borde del mapa
+    (`Formation.map_bounds`, lo pone `battle.gd`) y sus soldados desaparecen al llegar: la
+    compañía se pierde.
+- Indicador: `MoraleDisplay` (creado en `battle.gd`, un nodo dibuja todo): barrita encima de
+  cada compañía y etiqueta CLAVADA / ROTA / HUYE.
+- `Formation.all`: lista estática de compañías (usar en vez del grupo "formations").
 
 ## Rendimiento (objetivo 200-300 soldados)
 - Medido con 288 soldados combatiendo (12 compañías por bando): lógica 3,0 ms por fotograma
