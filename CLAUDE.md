@@ -24,8 +24,8 @@ con barra de órdenes y atajos, y rendimiento revisado (ver secciones de abajo).
 Orden de trabajo acordado para la Fase 2 (decidir el comportamiento y los controles con el
 usuario al empezar cada paso):
 1. **Moral** (hecha, ver "Moral").
-2. **Victoria y derrota.** ← siguiente
-3. **IA enemiga básica** (el enemigo usa las mismas órdenes que el jugador).
+2. **Victoria y derrota** (hecha, ver "Victoria y derrota").
+3. **IA enemiga básica** (el enemigo usa las mismas órdenes que el jugador). ← siguiente
 4. **Línea de visión y niebla de guerra.**
 5. **HUD y menús** (idea del usuario: un MVP de infantería completo y presentable antes de
    añadir más tipos de unidad).
@@ -54,6 +54,16 @@ Cada orden nueva lleva botón en la barra de órdenes y un atajo de teclado (dec
 - Indicador: `MoraleDisplay` (creado en `battle.gd`, un nodo dibuja todo): barrita encima de
   cada compañía y etiqueta CLAVADA / ROTA / HUYE.
 - `Formation.all`: lista estática de compañías (usar en vez del grupo "formations").
+
+## Victoria y derrota (Fase 2, paso 2; decisiones del usuario)
+- Un bando pierde cuando todas sus compañías han muerto o están huyendo
+  (`Formation.is_in_battle()`). Sin límite de tiempo. Si caen los dos a la vez, derrota.
+- `BattleOutcome` (CanvasLayer creado en `battle.gd`, `process_mode` ALWAYS) lo comprueba cada
+  0,5 s. A los 2 s pausa el juego y muestra el panel: VICTORIA/DERROTA, duración, soldados
+  caídos, huidos y compañías perdidas por bando; botones Reintentar (`reload_current_scene`) y
+  Salir (cierra el juego hasta que haya menú principal). Se pulirá en el paso de HUD y menús.
+- Señales de `Formation`: `soldier_fled` (un soldado sale del mapa huyendo) y
+  `company_lost(formation, fled)` (se queda sin soldados).
 
 ## Rendimiento (objetivo 200-300 soldados)
 - Medido con 288 soldados combatiendo (12 compañías por bando): lógica 3,0 ms por fotograma

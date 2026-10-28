@@ -1,5 +1,6 @@
 extends Node2D
-## Escena de batalla: ajusta la cámara a los límites del mapa y crea la barra de órdenes.
+## Escena de batalla: ajusta la cámara a los límites del mapa y crea el indicador de moral,
+## la barra de órdenes y el árbitro de victoria y derrota.
 
 @onready var _ground: TileMapLayer = $Ground
 @onready var _camera: BattleCamera = $BattleCamera
@@ -19,3 +20,6 @@ func _ready() -> void:
 	order_bar.name = "OrderBar"
 	order_bar.selection_manager = _selection_manager
 	add_child(order_bar)
+	var outcome := BattleOutcome.new()
+	outcome.name = "BattleOutcome"
+	add_child(outcome)

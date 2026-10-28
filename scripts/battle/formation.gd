@@ -6,6 +6,11 @@ extends Node2D
 ## También puede avanzar por saltos: una escuadra corre mientras las demás la cubren.
 ## La posición de este nodo es la media de las posiciones de sus soldados.
 
+## Un soldado de la compañía ha huido del mapa (no ha muerto, pero ya no combate).
+signal soldier_fled(formation: Formation)
+## La compañía se ha quedado sin soldados: fled es true si los últimos huyeron del mapa.
+signal company_lost(formation: Formation, fled: bool)
+
 enum Team { PLAYER, ENEMY }
 ## Estado de la moral de la compañía:
 ## FIRM: obedece todas las órdenes.
@@ -143,6 +148,11 @@ func advance_by(offset: Vector2) -> void:
 	var occupied: Array[Vector2] = _friendly_spots()
 	for squad in squads:
 		squad.order_shift(offset, occupied)
+
+
+## true mientras la compañía sigue en la batalla: tiene soldados y no está huyendo.
+func is_in_battle() -> bool:
+	return not soldiers.is_empty() and morale_state != Morale.FLEEING
 
 
 ## true si acepta órdenes de movimiento (mover, saltos, avanzar): solo con la moral firme.
@@ -340,6 +350,7 @@ func _update_fleeing() -> void:
 		var arrived: bool = squad.is_settled()
 		for soldier in squad.members.duplicate():
 			if arrived or (map_bounds.has_area() and not inner.has_point(soldier.global_position)):
+				soldier_fled.emit(self)
 				_remove_soldier(soldier)
 				soldier.queue_free()
 
@@ -475,6 +486,7 @@ func _remove_soldier(soldier: Soldier) -> void:
 				squad.queue_free()
 			break
 	if soldiers.is_empty():
+		company_lost.emit(self, morale_state == Morale.FLEEING)
 		queue_free.call_deferred()
 
 
