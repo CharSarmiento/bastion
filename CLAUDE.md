@@ -13,21 +13,24 @@
 - Repositorio público en GitHub (https://github.com/CharSarmiento/bastion). assets/ y _fuentes/
   están excluidos en .gitignore por la licencia de CraftPix: nunca deben subirse.
 
-## Fase actual: 1 · Prototipo de batalla
-Mapa de prueba, dos compañías propias (PlayerCompany y PlayerCompany2, para probar el mando
-de varias a la vez) y dos enemigas quietas. Selección (clic o recuadro),
-movimiento con clic derecho, disparo automático al enemigo en rango.
-Listo cuando: mover y disparar se siente bien.
+## Fase actual: 2 · Combate táctico
+Listo cuando: una batalla completa se puede jugar y ganar.
 
-Orden de trabajo acordado: pasos 1-2 hechos → A. movimiento moderno (hecho) →
-paso 3: enemigos y disparos (hecho) → C. cobertura (hecha) → D. avance por saltos (hecho).
+Fase 1 (prototipo de batalla) terminada: mapa de prueba con dos compañías propias
+(PlayerCompany y PlayerCompany2) y dos enemigas quietas; selección, movimiento moderno por
+escuadras, disparo automático, cobertura, saltos, órdenes Avanzar / Retirada / Mantener posición
+con barra de órdenes y atajos, y rendimiento revisado (ver secciones de abajo).
 
-Pendiente (ideas del usuario, en este orden; decidir controles con él al llegar):
-1. **"Avanzar"** (hecho, ver "Órdenes").
-2. **Retirada combatiendo** (hecha, ver "Órdenes").
-3. **"Mantener posición"** (hecha, ver "Órdenes").
+Orden de trabajo acordado para la Fase 2 (decidir el comportamiento y los controles con el
+usuario al empezar cada paso):
+1. **Moral** (sobre la supresión que ya existe). ← siguiente
+2. **Victoria y derrota.**
+3. **IA enemiga básica** (el enemigo usa las mismas órdenes que el jugador).
+4. **Línea de visión y niebla de guerra.**
+5. **HUD y menús** (idea del usuario: un MVP de infantería completo y presentable antes de
+   añadir más tipos de unidad).
+6. **Tanques**, 7. **morteros**, 8. **reconocimiento**.
 Cada orden nueva lleva botón en la barra de órdenes y un atajo de teclado (decisión del usuario).
-Rendimiento revisado (ver "Rendimiento"). Siguiente: cerrar la Fase 1 y empezar la Fase 2.
 
 ## Rendimiento (objetivo 200-300 soldados)
 - Medido con 288 soldados combatiendo (12 compañías por bando): lógica 3,0 ms por fotograma
@@ -112,7 +115,7 @@ Rendimiento revisado (ver "Rendimiento"). Siguiente: cerrar la Fase 1 y empezar 
 - Al morir: animación `Death`, el cuerpo pasa al nodo `Corpses` (grupo "corpses") y la
   compañía lo quita de su escuadra; sin soldados, la compañía desaparece.
 - Enemigos: `team = ENEMY`, teñidos con `scenes/battle/team_tint.gdshader` (verde → gris azulado).
-- Los enemigos de la Fase 1 no reciben órdenes, pero devuelven el fuego.
+- Los enemigos aún no reciben órdenes (hasta el paso 3 de la Fase 2), pero devuelven el fuego.
 - Acercarse para disparar (idea del usuario): si alguien de la compañía combate
   (`Formation.engaged`), los soldados que no llegan se adelantan hasta ponerse a tiro, como mucho
   `advance_leash` px desde su puesto y respetando la separación mínima

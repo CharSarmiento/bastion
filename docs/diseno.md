@@ -75,11 +75,15 @@ Cada unidad del jugador es una formación con soldados o vehículos dentro. Se s
 
 ### Órdenes
 
-1. **Mover** a un punto (clic derecho). Arrastrando con el clic derecho se dibuja el frente: su anchura y hacia dónde mira la unidad. Con modificador: movimiento rápido o sigiloso.
-2. **Atacar** una unidad enemiga concreta.
-3. **Mantener posición**: no persigue, dispara a lo que entre en rango.
-4. **Retirarse** hacia el borde propio del mapa; preserva tropas a cambio de ceder terreno.
-5. **Cambiar formación**: disposición de las escuadras (en línea, en cuña o en columna), que afecta frente de fuego, velocidad y vulnerabilidad a explosivos.
+1. **Mover** a un punto (clic derecho). Arrastrando con el clic derecho se dibuja el frente: su anchura y hacia dónde mira la unidad.
+2. **Avance por saltos** (Ctrl + clic derecho): una escuadra corre mientras las demás la cubren quietas; más lento, pero con menos bajas bajo fuego.
+3. **Avanzar** (Alt + clic derecho): la compañía se desplaza hasta el punto conservando la colocación de cada soldado y toma la cobertura que encuentre al llegar.
+4. **Retirada combatiendo** (Mayús + clic derecho): retroceden de espaldas disparando mientras tengan al enemigo a tiro y corren fuera de su alcance; preserva tropas a cambio de ceder terreno.
+5. **Mantener posición** (tecla H): interruptor permanente; nadie se adelanta por su cuenta para disparar.
+6. **Atacar** una unidad enemiga concreta (pendiente).
+7. **Cambiar formación** (pendiente): disposición de las escuadras (en línea, en cuña o en columna), que afecta frente de fuego, velocidad y vulnerabilidad a explosivos.
+
+Todas las órdenes tienen botón en la barra de órdenes (abajo, con unidades seleccionadas) y atajo de teclado.
 
 Los soldados dentro de la unidad buscan la cobertura más cercana a su puesto y disparan por su cuenta al enemigo visible.
 
@@ -253,14 +257,14 @@ res://
 - **`GameState` (autoload):** guarda el estado completo de la partida (regiones, ejércitos, unidades, recursos, turno). Es lo único que sobrevive entre escenas.
 - **`Campaign.tscn`:** muestra el mapa, gestiona turnos y movimientos, y lanza batallas.
 - **`Battle.tscn`:** recibe la configuración de batalla desde `GameState`, la juega y devuelve el resultado.
-- **`Formation` (unidad de mando):** el nodo que el jugador selecciona y ordena. Calcula la ruta con `NavigationAgent2D` y asigna un puesto a cada miembro.
+- **`Formation` (unidad de mando):** el nodo que el jugador selecciona y ordena. Se divide en escuadras (`Squad`) que calculan cada una su ruta y asignan un puesto a cada miembro.
 - **`Soldier` / `Vehicle`:** miembros individuales; siguen su puesto, buscan cobertura y disparan.
 - **`SupportManager`:** recibe peticiones de apoyo, aplica la demora y crea el efecto (explosiones, pasada de avión, helicóptero).
 - **`SaveSystem` (autoload):** guarda y carga `GameState` a disco.
 
 ### Decisiones técnicas
 
-- **Movimiento:** navegación 2D de Godot (`NavigationRegion2D` + `NavigationAgent2D`) para la formación; los soldados solo siguen su puesto, no calculan rutas propias. Esto mantiene el rendimiento con muchas unidades.
+- **Movimiento:** navegación 2D de Godot (`NavigationRegion2D`); cada escuadra calcula una ruta y sus soldados la siguen en fila por el rastro de un punto guía, sin calcular rutas propias (solo un rodeo corto si algo les bloquea). Esto mantiene el rendimiento con muchas unidades: 288 soldados combatiendo cuestan unos 3 ms por fotograma.
 - **Terreno:** `TileMapLayer` con datos personalizados por tile (cobertura, visibilidad, coste de movimiento).
 - **Visión:** comprobación por raycast o por cuadrícula entre unidades, recalculada unas pocas veces por segundo, no cada frame.
 - **Escala objetivo:** 10–20 unidades de mando por bando, unos 200–300 soldados en pantalla.
@@ -270,15 +274,17 @@ res://
 
 El desarrollo va de lo más arriesgado a lo más seguro: primero se comprueba que la batalla es divertida, luego se construye la campaña y al final se conectan. No se pasa a la siguiente fase hasta cumplir su condición de "listo".
 
-### Fase 1 · Prototipo de batalla  ← fase actual
+### Fase 1 · Prototipo de batalla  ✓ terminada
 
 Mapa de prueba, una compañía propia y dos enemigas quietas. Selección, movimiento en formación, disparo automático.
 
 **Listo cuando:** mover y disparar se siente bien.
 
-### Fase 2 · Combate táctico
+### Fase 2 · Combate táctico  ← fase actual
 
 Infantería, tanques, morteros y reconocimiento; cobertura, moral, niebla de guerra e IA enemiga básica.
+
+Orden previsto: moral → victoria y derrota → IA enemiga básica → línea de visión y niebla de guerra → HUD y menús → tanques → morteros → reconocimiento. Así, antes de añadir más tipos de unidad, ya hay una batalla de infantería completa y presentable (un MVP). La cobertura ya se hizo en la Fase 1.
 
 **Listo cuando:** una batalla completa se puede jugar y ganar.
 
