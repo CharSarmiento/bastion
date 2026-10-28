@@ -14,12 +14,18 @@ const FADED_ALPHA := 0.45
 const FADE_CHECK_INTERVAL := 0.2
 const FADE_SPEED := 4.0
 
+## Todas las coberturas del mapa. Recorrer esta lista es mucho más rápido que pedir el grupo
+## "cover" cada vez (eso crea una lista nueva en cada llamada).
+static var all: Array[CoverObject] = []
+
 @export var cover_type: CoverType
 
 ## CIRCLE: radio del obstáculo. LINE: medio grosor.
 var radius: float = 16.0
 ## Solo LINE: media longitud.
 var half_length: float = 0.0
+## Hasta dónde llega el objeto desde su centro (px), para descartar rápido los que están lejos.
+var extent: float = 16.0
 ## Radio de la copa (todo el sprite), para saber si hay soldados debajo.
 var _canopy_radius: float = 0.0
 var _fade_timer: float = 0.0
@@ -37,8 +43,24 @@ func _enter_tree() -> void:
 	else:
 		half_length = size.x / 2.0 * cover_type.size_factor
 		radius = size.y / 2.0
+	extent = half_length + radius
 	_canopy_radius = minf(size.x, size.y) / 2.0 * 0.9
 	set_process(cover_type.fade_when_units_below)
+	all.append(self)
+
+
+func _exit_tree() -> void:
+	all.erase(self)
+
+
+## Coberturas cuyo borde puede quedar a menos de distance píxeles de point.
+static func near(point: Vector2, distance: float) -> Array[CoverObject]:
+	var result: Array[CoverObject] = []
+	for cover in all:
+		var reach: float = distance + cover.extent
+		if cover.global_position.distance_squared_to(point) <= reach * reach:
+			result.append(cover)
+	return result
 
 
 func _process(delta: float) -> void:
@@ -46,11 +68,12 @@ func _process(delta: float) -> void:
 	if _fade_timer <= 0.0:
 		_fade_timer = FADE_CHECK_INTERVAL
 		_target_alpha = 1.0
-		for node in get_tree().get_nodes_in_group("soldiers"):
-			var soldier: Node2D = node
-			if soldier.global_position.distance_to(global_position) < _canopy_radius:
-				_target_alpha = FADED_ALPHA
-				break
+		var radius_squared: float = _canopy_radius * _canopy_radius
+		for team: int in Soldier.alive_by_team:
+			for soldier: Soldier in Soldier.alive_by_team[team]:
+				if soldier.global_position.distance_squared_to(global_position) < radius_squared:
+					_target_alpha = FADED_ALPHA
+					break
 	modulate.a = move_toward(modulate.a, _target_alpha, FADE_SPEED * delta)
 
 

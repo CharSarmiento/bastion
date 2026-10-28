@@ -46,6 +46,9 @@ const HIT_FLASH_DURATION := 0.12
 const ENEMY_TINT_SHADER := preload("res://scenes/battle/team_tint.gdshader")
 
 static var _enemy_material: ShaderMaterial
+## Soldados vivos de cada bando (bando -> Array). Buscar enemigos o compañeros aquí es mucho
+## más rápido que recorrer el grupo "soldiers" entero (eso crea una lista nueva en cada llamada).
+static var alive_by_team: Dictionary = {}
 
 ## Textura del cuerpo en el momento de disparar (incluye el fogonazo).
 @export var shot_texture: Texture2D
@@ -99,6 +102,9 @@ var _effects: BattleEffects = null
 
 func _ready() -> void:
 	add_to_group("soldiers")
+	if not alive_by_team.has(team):
+		alive_by_team[team] = []
+	alive_by_team[team].append(self)
 	_slot = global_position
 	_body_texture = _body.texture
 	if unit_type:
@@ -146,12 +152,16 @@ func is_alive() -> bool:
 	return not _dead
 
 
+## Soldados vivos del bando team.
+static func alive_in_team(team_id: int) -> Array:
+	return alive_by_team.get(team_id, [])
+
+
 ## Protección (0-1) que le da la cobertura que tenga pegada frente a un disparo desde shooter.
 ## Si varias cubren a la vez, cuenta la mejor.
 func cover_protection_from(shooter: Vector2) -> float:
 	var best: float = 0.0
-	for node in get_tree().get_nodes_in_group("cover"):
-		var cover: CoverObject = node
+	for cover in CoverObject.near(global_position, CoverObject.COVER_REACH):
 		best = maxf(best, cover.protection_for(global_position, shooter))
 	return best
 
@@ -164,15 +174,16 @@ func current_target() -> Soldier:
 ## El enemigo vivo más cercano a point dentro de max_distance, o null si no hay ninguno.
 func find_nearest_enemy(point: Vector2, max_distance: float) -> Soldier:
 	var best: Soldier = null
-	var best_distance: float = max_distance
-	for node in get_tree().get_nodes_in_group("soldiers"):
-		var other: Soldier = node
-		if other.team == team or not other.is_alive():
+	# Se comparan distancias al cuadrado: da el mismo resultado y es más rápido.
+	var best_distance_squared: float = max_distance * max_distance
+	for other_team: int in alive_by_team:
+		if other_team == team:
 			continue
-		var distance: float = point.distance_to(other.global_position)
-		if distance <= best_distance:
-			best = other
-			best_distance = distance
+		for other: Soldier in alive_by_team[other_team]:
+			var distance_squared: float = point.distance_squared_to(other.global_position)
+			if distance_squared <= best_distance_squared:
+				best = other
+				best_distance_squared = distance_squared
 	return best
 
 
@@ -342,6 +353,7 @@ func _die() -> void:
 	_dead = true
 	selected = false
 	remove_from_group("soldiers")
+	_unregister()
 	set_physics_process(false)
 	_visual.modulate = Color.WHITE
 	_legs.hide()
@@ -353,6 +365,15 @@ func _die() -> void:
 	# avisar a la compañía para que, si era el último, el cuerpo se salve antes de que ella desaparezca.
 	_become_corpse.call_deferred()
 	died.emit(self)
+
+
+func _exit_tree() -> void:
+	_unregister()
+
+
+func _unregister() -> void:
+	var list: Array = alive_by_team.get(team, [])
+	list.erase(self)
 
 
 func _become_corpse() -> void:
@@ -367,6 +388,10 @@ func _become_corpse() -> void:
 func _update_detour() -> void:
 	var map: RID = get_world_2d().navigation_map
 	if NavigationServer2D.map_get_iteration_id(map) == 0:
+		return
+	# Ya está en su puesto (o casi): no hay camino que comprobar.
+	if distance_to_slot() <= PATH_CHECK_STEP:
+		_detour.clear()
 		return
 	if _is_straight_line_walkable(map, global_position, _slot):
 		_detour.clear()

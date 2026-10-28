@@ -258,10 +258,7 @@ func _shift_spot(point: Vector2, facing: Vector2, occupied: Array[Vector2]) -> V
 	var spacing: float = _unit_type.deploy_spacing_min
 	var best: Variant = null
 	var best_score: float = -INF
-	for node in get_tree().get_nodes_in_group("cover"):
-		var cover: CoverObject = node
-		if cover.global_position.distance_to(point) > SHIFT_COVER_RADIUS + 40.0:
-			continue
+	for cover in CoverObject.near(point, SHIFT_COVER_RADIUS + CoverObject.STAND_OFFSET):
 		for candidate in cover.cover_points(facing):
 			var distance: float = candidate.distance_to(point)
 			if distance > SHIFT_COVER_RADIUS:
@@ -277,15 +274,34 @@ func _shift_spot(point: Vector2, facing: Vector2, occupied: Array[Vector2]) -> V
 		return best
 	if _is_valid_stand_point(point) and _far_from_all(point, occupied, spacing):
 		return point
-	# El sitio cae en el agua, en un obstáculo o encima de un compañero: busca el más cercano.
+	# El sitio cae en el agua, en un obstáculo o encima de un compañero: busca alrededor del punto
+	# de tierra más cercano (si se buscara alrededor de un punto en mitad del río, todos acabarían
+	# en el mismo trozo de orilla). Si no hay hueco, el sitio más despejado que haya encontrado.
+	var base: Vector2 = NavigationServer2D.map_get_closest_point(_map(), point) if _map_ready() else point
+	var fallback: Vector2 = base
+	var fallback_clearance: float = -1.0
 	for attempt in DEPLOY_ATTEMPTS:
 		var radius: float = SHIFT_SEARCH_RADIUS * (attempt + 1) / DEPLOY_ATTEMPTS
-		var candidate: Vector2 = point + Vector2.from_angle(_rng.randf() * TAU) * radius
+		var candidate: Vector2 = base + Vector2.from_angle(_rng.randf() * TAU) * radius
 		if _map_ready():
 			candidate = NavigationServer2D.map_get_closest_point(_map(), candidate)
-		if _is_valid_stand_point(candidate) and _far_from_all(candidate, occupied, spacing * 0.8):
+		if not _is_valid_stand_point(candidate):
+			continue
+		var clearance: float = _clearance(candidate, occupied)
+		if clearance >= spacing * 0.8:
 			return candidate
-	return NavigationServer2D.map_get_closest_point(_map(), point) if _map_ready() else point
+		if clearance > fallback_clearance:
+			fallback = candidate
+			fallback_clearance = clearance
+	return fallback
+
+
+## Distancia de point al más cercano de others (INF si no hay ninguno).
+func _clearance(point: Vector2, others: Array[Vector2]) -> float:
+	var closest: float = INF
+	for other in others:
+		closest = minf(closest, other.distance_to(point))
+	return closest
 
 
 func _map() -> RID:
@@ -424,10 +440,7 @@ func _advance_cover_point(index: int, spot: Vector2, enemy_position: Vector2, re
 	var best: Variant = null
 	var best_score: float = -INF
 	var min_enemy_distance: float = _unit_type.effective_range * ADVANCE_MIN_RANGE_FACTOR
-	for node in get_tree().get_nodes_in_group("cover"):
-		var cover: CoverObject = node
-		if cover.global_position.distance_to(spot) > _unit_type.advance_leash + 40.0:
-			continue
+	for cover in CoverObject.near(spot, _unit_type.advance_leash + CoverObject.STAND_OFFSET):
 		var threat_dir: Vector2 = (enemy_position - cover.global_position).normalized()
 		for point in cover.cover_points(threat_dir):
 			var travel: float = spot.distance_to(point)
@@ -448,10 +461,9 @@ func _advance_cover_point(index: int, spot: Vector2, enemy_position: Vector2, re
 ## true si ningún otro soldado del bando (de esta compañía o de otra) va a quedar demasiado
 ## cerca de point.
 func _is_spot_free(point: Vector2, who: Soldier) -> bool:
-	for node in get_tree().get_nodes_in_group("soldiers"):
-		var other: Soldier = node
-		if other != who and other.team == who.team \
-				and other.target_slot().distance_to(point) < _unit_type.deploy_spacing_min:
+	var spacing_squared: float = _unit_type.deploy_spacing_min * _unit_type.deploy_spacing_min
+	for other: Soldier in Soldier.alive_in_team(who.team):
+		if other != who and other.target_slot().distance_squared_to(point) < spacing_squared:
 			return false
 	return true
 
@@ -554,8 +566,7 @@ func _pick_cover_spots(destination: Vector2, facing: Vector2, half_width: float,
 	var right := Vector2(-facing.y, facing.x)
 	var margin: float = _unit_type.cover_search_distance
 	var candidates: Array[Array] = []
-	for node in get_tree().get_nodes_in_group("cover"):
-		var cover: CoverObject = node
+	for cover in CoverObject.all:
 		var offset: Vector2 = cover.global_position - destination
 		if absf(offset.dot(right)) > half_width + margin or absf(offset.dot(facing)) > half_depth + margin:
 			continue
@@ -587,8 +598,7 @@ func _is_valid_stand_point(point: Vector2) -> bool:
 	if _map_ready():
 		if NavigationServer2D.map_get_closest_point(_map(), point).distance_to(point) > 1.0:
 			return false
-	for node in get_tree().get_nodes_in_group("cover"):
-		var cover: CoverObject = node
+	for cover in CoverObject.near(point, 4.0):
 		if cover.distance_to_point(point) < 4.0:
 			return false
 	return true

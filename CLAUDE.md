@@ -27,7 +27,18 @@ Pendiente (ideas del usuario, en este orden; decidir controles con él al llegar
 2. **Retirada combatiendo** (hecha, ver "Órdenes").
 3. **"Mantener posición"** (hecha, ver "Órdenes").
 Cada orden nueva lleva botón en la barra de órdenes y un atajo de teclado (decisión del usuario).
-Después: cerrar la Fase 1, revisar rendimiento (objetivo 200-300 soldados) y empezar la Fase 2.
+Rendimiento revisado (ver "Rendimiento"). Siguiente: cerrar la Fase 1 y empezar la Fase 2.
+
+## Rendimiento (objetivo 200-300 soldados)
+- Medido con 288 soldados combatiendo (12 compañías por bando): lógica 3,0 ms por fotograma
+  de media (pico 14 ms al dar órdenes a todas a la vez); con dibujo, 3,7 ms. Presupuesto a
+  60 FPS: 16,7 ms. Con 576 soldados: 7,0 ms de media.
+- Regla: en código que se ejecuta a menudo, nunca `get_nodes_in_group()` (crea una lista
+  nueva cada vez). Usar `Soldier.alive_by_team` / `Soldier.alive_in_team(team)` (vivos por
+  bando) y `CoverObject.all` / `CoverObject.near(point, distance)`. Comparar distancias al
+  cuadrado (`distance_squared_to`) en bucles grandes. Los grupos "soldiers" y "cover" se
+  mantienen (los usan las pruebas).
+- Si hace falta más: rejilla espacial para buscar enemigos (sigue siendo N², ~1 ms con 576).
 
 ## Órdenes y barra de órdenes
 - Varias compañías: recuadro o Mayús + clic izquierdo. Clic simple y "Avanzar" conservan su
